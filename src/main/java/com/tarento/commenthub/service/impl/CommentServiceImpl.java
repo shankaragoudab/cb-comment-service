@@ -21,21 +21,22 @@ import com.tarento.commenthub.exception.CommentException;
 import com.tarento.commenthub.repository.CommentRepository;
 import com.tarento.commenthub.service.CommentService;
 import com.tarento.commenthub.service.CommentTreeService;
+import com.tarento.commenthub.transactional.cassandrautils.CassandraOperation;
+import com.tarento.commenthub.transactional.utils.ApiResponse;
 import com.tarento.commenthub.utility.Status;
 import java.io.InputStream;
 import java.sql.Timestamp;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
 
 @Service
 @Slf4j
@@ -52,6 +53,9 @@ public class CommentServiceImpl implements CommentService {
 
   @Autowired
   private RedisTemplate redisTemplate;
+
+  @Autowired
+  private CassandraOperation cassandraOperation;
 
   @Value("${redis.ttl}")
   private long redisTtl;
@@ -268,6 +272,70 @@ public class CommentServiceImpl implements CommentService {
         .set(COMMENT_KEY + commentId, comment, redisTtl,
             TimeUnit.SECONDS);
     return comment;
+  }
+
+  @Override
+  public ApiResponse likeComment(Map<String, Object> likePayload) {
+    ApiResponse response = new ApiResponse();
+    response.setResponseCode(HttpStatus.OK);
+    String error = validateLikeCommentPayload(likePayload);
+    if(StringUtils.isBlank(error)){
+        response.setResponseCode(HttpStatus.BAD_REQUEST);
+        response.getParams().setErr(error);
+        return response;
+    }
+    try {
+      String commentId = (String) likePayload.get(Constants.COMMENT_ID);
+      String userId = (String) likePayload.get(Constants.USERID);
+      Map<String, Object> propertyMap = new HashMap<>();
+      propertyMap.put(Constants.COMMENT_ID, commentId);
+      propertyMap.put(Constants.USERID, userId);
+      List<Map<String, Object>> records = cassandraOperation.getRecordsByPropertiesWithoutFiltering(Constants.KEYSPACE_SUNBIRD,"comment_likes",propertyMap,Collections.singletonList("flag"),null);
+      if(!records.isEmpty()){
+        String record = (String) records.get(0).get(Constants.FLAG);
+        if(record.equals(likePayload.get(Constants.FLAG))){
+          response.setResponseCode(HttpStatus.BAD_REQUEST);
+          response.getParams().setErr("Already given " + likePayload.get(Constants.FLAG) + " for this comment");
+          return response;
+        }
+        Map<String, Object> map = new HashMap<>();
+        map.put(Constants.FLAG,likePayload.get(Constants.FLAG));
+        Map<String, Object> compositeKey = new HashMap<>();
+        compositeKey.put(Constants.COMMENT_ID,commentId);
+        compositeKey.put(Constants.USERID,userId);
+        cassandraOperation.updateRecordByCompositeKey(Constants.KEYSPACE_SUNBIRD,"comment_likes",map,compositeKey);
+      }else{
+        propertyMap.put(Constants.FLAG,"like");
+        cassandraOperation.insertRecord(Constants.KEYSPACE_SUNBIRD,"comment_likes",propertyMap);
+      }
+    }catch (Exception e){
+      response.setResponseCode(HttpStatus.INTERNAL_SERVER_ERROR);
+      response.getParams().setErr(e.getMessage());
+      log.error(e.getMessage());
+    }
+    return response;
+  }
+
+  private String validateLikeCommentPayload(Map<String, Object> likePayload) {
+    StringBuffer str = new StringBuffer();
+    List<String> errList = new ArrayList<>();
+
+    if (StringUtils.isBlank((String) likePayload.get(Constants.COMMENT_ID))) {
+      errList.add(Constants.COMMENT_ID);
+    }
+    if (StringUtils.isBlank((String) likePayload.get(Constants.USERID))) {
+      errList.add(Constants.USERID);
+    }
+    String voteType = (String) likePayload.get(Constants.FLAG);
+    if (StringUtils.isBlank(voteType)) {
+      errList.add(Constants.FLAG);
+    } else if (!Constants.LIKE.equalsIgnoreCase(voteType) && !Constants.DISLIKE.equalsIgnoreCase(voteType)) {
+      errList.add("fla must be either 'like' or 'dislike'");
+    }
+    if (!errList.isEmpty()) {
+      str.append("Failed Due To Missing Params - ").append(errList).append(".");
+    }
+    return str.toString();
   }
 
 }

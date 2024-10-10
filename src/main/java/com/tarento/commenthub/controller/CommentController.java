@@ -11,8 +11,12 @@ import com.tarento.commenthub.entity.CommentTree;
 import com.tarento.commenthub.service.CommentService;
 import com.tarento.commenthub.service.CommentTreeService;
 import java.util.List;
+import java.util.Map;
+
+import com.tarento.commenthub.transactional.utils.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -107,5 +111,11 @@ public class CommentController {
   @GetMapping("/health")
   public String healthCheck() {
     return Constants.SUCCESS_STRING;
+  }
+
+  @PostMapping("/v1/like")
+  public ResponseEntity likeComment(@RequestBody Map<String, Object> likePayload) {
+    ApiResponse response = commentService.likeComment(likePayload);
+    return new ResponseEntity<>(response, response.getResponseCode());
   }
 }

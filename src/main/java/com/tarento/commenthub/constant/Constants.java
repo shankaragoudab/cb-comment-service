@@ -73,11 +73,14 @@ public class Constants {
   public static final String QUE_MARK = "?";
   public static final String COMMA = ",";
   public static final String CLOSING_BRACE = ");";
-  public static final String INTEREST_ID = "interest_id";
   public static final String RESPONSE = "response";
   public static final String SUCCESS = "success";
   public static final String FAILED = "Failed";
   public static final String ERROR_MESSAGE = "errmsg";
+  public static final String USERID = "userId";
+  public static final String FLAG = "flag";
+  public static final String LIKE = "like";
+  public static final String DISLIKE = "dislike";
 
 
 }
