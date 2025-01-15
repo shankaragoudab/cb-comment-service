@@ -569,6 +569,17 @@ public class CommentServiceImpl implements CommentService {
       courseDetails = fetchCourseDetails(courseId);
 
     }
+    if (commentTree.getCommentTreeData().has(Constants.FIRST_LEVEL_NODES)
+        && !commentTree.getCommentTreeData().get(Constants.FIRST_LEVEL_NODES).isNull()) {
+      // Remove the key from the JSON
+      ((ObjectNode) commentTree.getCommentTreeData()).remove(Constants.FIRST_LEVEL_NODES);
+    }
+    if (commentTree.getCommentTreeData().has(Constants.CHILD_NODES)
+        && !commentTree.getCommentTreeData().get(Constants.CHILD_NODES).isNull()) {
+      // Remove the key from the JSON
+      ((ObjectNode) commentTree.getCommentTreeData()).remove(Constants.CHILD_NODES);
+    }
+
     CommentsResoponseDTO commentsResoponseDTO = new CommentsResoponseDTO(commentTree,
         comments, userList, taggedUsers, courseDetails);
     Optional.ofNullable(comments)
