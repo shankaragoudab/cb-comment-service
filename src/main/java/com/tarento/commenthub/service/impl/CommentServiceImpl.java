@@ -569,6 +569,7 @@ public class CommentServiceImpl implements CommentService {
       courseDetails = fetchCourseDetails(courseId);
 
     }
+    //for v2 API
     if (version.equalsIgnoreCase("v2")){
       if (commentTree.getCommentTreeData().has(Constants.FIRST_LEVEL_NODES)
           && !commentTree.getCommentTreeData().get(Constants.FIRST_LEVEL_NODES).isNull()) {
