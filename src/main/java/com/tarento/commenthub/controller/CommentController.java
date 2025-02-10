@@ -119,7 +119,7 @@ public class CommentController {
 
   @PostMapping("/search")
   public ResponseEntity<?> search(@RequestBody SearchCriteria searchCriteria) {
-    ApiResponse response = commentService.paginatedComment(searchCriteria);
+    ApiResponse response = commentService.paginatedComment(searchCriteria, "v1");
     if (response.getResponseCode().equals(HttpStatus.NOT_FOUND) && response.getResult().isEmpty()) {
       return new ResponseEntity<>(response, HttpStatus.OK);
     }
@@ -154,6 +154,15 @@ public class CommentController {
   @GetMapping("/v1/likedComments")
   public ResponseEntity getCommentsLikedByUser(@RequestParam String courseId, @RequestHeader(Constants.X_AUTH_TOKEN) String token) {
     ApiResponse response = commentService.getCommentsLikedByUser(courseId, token);
+    return new ResponseEntity<>(response, response.getResponseCode());
+  }
+
+  @PostMapping("/v2/search")
+  public ResponseEntity<?> searchV2(@RequestBody SearchCriteria searchCriteria) {
+    ApiResponse response = commentService.paginatedComment(searchCriteria, "v2");
+    if (response.getResponseCode().equals(HttpStatus.NOT_FOUND) && response.getResult().isEmpty()) {
+      return new ResponseEntity<>(response, HttpStatus.OK);
+    }
     return new ResponseEntity<>(response, response.getResponseCode());
   }
 
