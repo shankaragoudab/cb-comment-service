@@ -30,7 +30,7 @@ public interface CommentService {
 
   ApiResponse getCommentLike(String commentId, String userId);
 
-  ApiResponse paginatedComment(SearchCriteria searchCriteria);
+  ApiResponse paginatedComment(SearchCriteria searchCriteria, String version);
 
   ApiResponse listOfComments(List<String> commentIds);
 
@@ -39,4 +39,5 @@ public interface CommentService {
   ApiResponse deleteReportedComments(Map<String, Object> request, String token);
 
   ApiResponse getCommentsLikedByUser(String courseId, String token);
+
 }

@@ -460,7 +460,7 @@ public class CommentServiceImpl implements CommentService {
   }
 
   @Override
-  public ApiResponse paginatedComment(SearchCriteria searchCriteria) {
+  public ApiResponse paginatedComment(SearchCriteria searchCriteria, String version) {
     String error = validateSearchPayload(searchCriteria);
     ApiResponse response = new ApiResponse();
     response.setResponseCode(HttpStatus.OK);
@@ -491,7 +491,7 @@ public class CommentServiceImpl implements CommentService {
       resultMap = (Map<String, Object>) redisTemplate.opsForValue()
           .get(generateRedisJwtTokenKey(commentTreeId, offset, limit));
     } else {
-      resultMap = fetchCommentFromPrimary(offset, limit, childNodeList, commentTree.get(), searchCriteria.isEnrichedUser());
+      resultMap = fetchCommentFromPrimary(offset, limit, childNodeList, commentTree.get(), searchCriteria.isEnrichedUser(), version);
       redisTemplate.opsForValue()
           .set(generateRedisJwtTokenKey(commentTreeId, offset, limit), resultMap, redisTtl,
               TimeUnit.SECONDS);
@@ -500,7 +500,7 @@ public class CommentServiceImpl implements CommentService {
     }
     if (MapUtils.isEmpty(resultMap)) {
       log.info("CommentServiceImpl::getComments::fetch Comments from postgres");
-      resultMap = fetchCommentFromPrimary(offset, limit, childNodeList, commentTree.get(), searchCriteria.isEnrichedUser());
+      resultMap = fetchCommentFromPrimary(offset, limit, childNodeList, commentTree.get(), searchCriteria.isEnrichedUser(), version);
       redisTemplate.opsForValue()
           .set(generateRedisJwtTokenKey(commentTreeId, offset, limit), resultMap, redisTtl,
               TimeUnit.SECONDS);
@@ -514,7 +514,7 @@ public class CommentServiceImpl implements CommentService {
   }
 
   private Map<String, Object> fetchCommentFromPrimary(int offset, int limit,
-      List<String> childNodeList, CommentTree commentTree, boolean isUserEnriched) {
+      List<String> childNodeList, CommentTree commentTree, boolean isUserEnriched, String version) {
     Map<String, Object> resultMap = new HashMap<>();
     Pageable pageable = PageRequest.of(offset, limit,
         Sort.by(Sort.Direction.DESC, Constants.CREATED_DATE));
@@ -569,15 +569,18 @@ public class CommentServiceImpl implements CommentService {
       courseDetails = fetchCourseDetails(courseId);
 
     }
-    if (commentTree.getCommentTreeData().has(Constants.FIRST_LEVEL_NODES)
-        && !commentTree.getCommentTreeData().get(Constants.FIRST_LEVEL_NODES).isNull()) {
-      // Remove the key from the JSON
-      ((ObjectNode) commentTree.getCommentTreeData()).remove(Constants.FIRST_LEVEL_NODES);
-    }
-    if (commentTree.getCommentTreeData().has(Constants.CHILD_NODES)
-        && !commentTree.getCommentTreeData().get(Constants.CHILD_NODES).isNull()) {
-      // Remove the key from the JSON
-      ((ObjectNode) commentTree.getCommentTreeData()).remove(Constants.CHILD_NODES);
+    //for v2 API
+    if (version.equalsIgnoreCase("v2")){
+      if (commentTree.getCommentTreeData().has(Constants.FIRST_LEVEL_NODES)
+          && !commentTree.getCommentTreeData().get(Constants.FIRST_LEVEL_NODES).isNull()) {
+        // Remove the key from the JSON
+        ((ObjectNode) commentTree.getCommentTreeData()).remove(Constants.FIRST_LEVEL_NODES);
+      }
+      if (commentTree.getCommentTreeData().has(Constants.CHILD_NODES)
+          && !commentTree.getCommentTreeData().get(Constants.CHILD_NODES).isNull()) {
+        // Remove the key from the JSON
+        ((ObjectNode) commentTree.getCommentTreeData()).remove(Constants.CHILD_NODES);
+      }
     }
 
     CommentsResoponseDTO commentsResoponseDTO = new CommentsResoponseDTO(commentTree,
