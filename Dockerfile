@@ -13,7 +13,7 @@ RUN apt-get update \
 
 
 COPY cb-comment-service-0.0.1-SNAPSHOT.jar /opt/
-RUN echo Hello World !!!
+RUN echo Hello Dev World !!!
 #HEALTHCHECK --interval=30s --timeout=30s CMD curl --fail http://localhost:7001/actuator/health || exit 1
 CMD ["/bin/bash", "-c", "java -XX:+PrintFlagsFinal $JAVA_OPTIONS -XX:+UnlockExperimentalVMOptions -XX:+UseCGroupMemoryLimitForHeap -jar /opt/cb-comment-service-0.0.1-SNAPSHOT.jar"]
 
