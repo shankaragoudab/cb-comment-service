@@ -45,7 +45,7 @@ public class FetchUserDetails {
             return objectMapper.readValue(stringifiedJson, Object.class); // You can map this to a specific User type if needed
           } catch (Exception e) {
             // Handle any exceptions during deserialization
-           log.error("Error while fetching user details from Redis: {}", e.getMessage());
+           log.error("Error while fetching user details from Redis: {}", e.getMessage(), e);
             return null; // Return null in case of error
           }
         })
