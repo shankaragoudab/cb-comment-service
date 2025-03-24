@@ -551,6 +551,7 @@ public class CommentServiceImpl implements CommentService {
     List<String> commentedUserListWithoutPrefix = new ArrayList<>(owneruserIds);
     userList = fetchUser.fetchDataForKeys(commentedUserListWithoutPrefix);
     if (userList == null || userList.isEmpty()) {
+      log.info("CommentServiceImpl::getComments::fetching userDetails from primary");
       // Handle the case where taggedUsers is empty or null
       userList = fetchUser.fetchUserFromprimary(commentedUserListWithoutPrefix);
     }
@@ -558,6 +559,7 @@ public class CommentServiceImpl implements CommentService {
     List<String> taggedUserListWithoutPrefix = new ArrayList<>(uniqueTaggedUserIdWithoutPrefixs);
     List<Object> taggedUsers = fetchUser.fetchDataForKeys(taggedUserList);
     if (taggedUsers == null || taggedUsers.isEmpty()) {
+      log.info("CommentServiceImpl::getComments::fetching taggedUserDetails from primary");
       // Handle the case where taggedUsers is empty or null
       taggedUsers = fetchUser.fetchUserFromprimary(taggedUserListWithoutPrefix);
     }
