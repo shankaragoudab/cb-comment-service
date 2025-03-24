@@ -11,12 +11,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
+@Slf4j
 @Component
 public class FetchUserDetails {
 
@@ -29,6 +31,7 @@ public class FetchUserDetails {
   ObjectMapper objectMapper = new ObjectMapper();
 
   public List<Object> fetchDataForKeys(List<String> keys) {
+    log.info("FetchUserDetails::fetchDataForKeys::inside method");
     // Fetch values for all keys from Redis
     List<Object> values = redisTemplate.opsForValue().multiGet(keys);
 
@@ -42,7 +45,7 @@ public class FetchUserDetails {
             return objectMapper.readValue(stringifiedJson, Object.class); // You can map this to a specific User type if needed
           } catch (Exception e) {
             // Handle any exceptions during deserialization
-            e.printStackTrace();
+           log.error("Error while fetching user details from Redis: {}", e.getMessage());
             return null; // Return null in case of error
           }
         })
