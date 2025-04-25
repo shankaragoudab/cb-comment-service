@@ -15,12 +15,15 @@ import com.tarento.commenthub.service.CommentTreeService;
 import com.tarento.commenthub.utility.Status;
 import java.sql.Timestamp;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import lombok.extern.log4j.Log4j2;
 import net.bytebuddy.implementation.bytecode.Throw;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -37,7 +40,14 @@ public class CommentTreeServiceImpl implements CommentTreeService {
   @Autowired
   private CommentTreeRepository commentTreeRepository;
 
+  @Autowired
+  private RedisTemplate redisTemplate;
+
+  @Value("${redis.ttl.comment.tree}")
+  private long redisTtl;
+
   public CommentTree createCommentTree(JsonNode payload) {
+    log.info("CommentTreeService::createCommentTree:Creating comment tree with payload: {}", payload);
     CommentTreeIdentifierDTO commentTreeIdentifierDTO = getCommentTreeIdentifierDTO(
         payload.get(Constants.COMMENT_TREE_DATA));
     String commentTreeId = generateJwtTokenKey(commentTreeIdentifierDTO);
@@ -66,7 +76,12 @@ public class CommentTreeServiceImpl implements CommentTreeService {
       Timestamp currentTime = new Timestamp(System.currentTimeMillis());
       commentTree.setCreatedDate(currentTime);
       commentTree.setLastUpdatedDate(currentTime);
-
+      Map<String, Object> resultMap;
+      resultMap = objectMapper.convertValue(
+          commentTree.getCommentTreeData(), Map.class);
+      redisTemplate.opsForValue()
+          .set(Constants.COMMENT_TREE_REDIS_KEY + commentTreeId, resultMap, redisTtl,
+              TimeUnit.SECONDS);
       return commentTreeRepository.save(commentTree);
     } catch (Exception e) {
       e.printStackTrace();
@@ -75,6 +90,7 @@ public class CommentTreeServiceImpl implements CommentTreeService {
   }
 
   public CommentTree updateCommentTree(JsonNode payload) {
+    log.info("CommentTreeService:updateCommentTree:updating commentTree : {}", payload);
     CommentTree commentTree;
     String commentTreeId = payload.get(Constants.COMMENT_TREE_ID).asText();
     Optional<CommentTree> optCommentTree = commentTreeRepository.findById(commentTreeId);
@@ -125,7 +141,13 @@ public class CommentTreeServiceImpl implements CommentTreeService {
 
         Timestamp currentTime = new Timestamp(System.currentTimeMillis());
         commentTree.setLastUpdatedDate(currentTime);
-        return commentTreeRepository.save(commentTree);
+        CommentTree persistedCommentTree = commentTreeRepository.save(commentTree);
+        Map<String, Object> resultMap = objectMapper.convertValue(
+            persistedCommentTree.getCommentTreeData(), Map.class);
+        redisTemplate.opsForValue()
+            .set(Constants.COMMENT_TREE_REDIS_KEY + commentTreeId, resultMap, redisTtl,
+                TimeUnit.SECONDS);
+        return persistedCommentTree;
       } catch (Exception e) {
         e.printStackTrace();
         throw new CommentException(Constants.ERROR, e.getMessage(), HttpStatus.OK.value());
@@ -178,7 +200,8 @@ public class CommentTreeServiceImpl implements CommentTreeService {
   @Override
   public void updateCommentTreeForDeletedComment(String commentId,
       CommentTreeIdentifierDTO commentTreeIdentifierDTO) {
-    log.info("Updating comment tree for deleted comment with ID: {}", commentId);
+    log.info("Updating comment tree for deleted comment with ID: {}, CommentTreeIdentifierDTO: {}",
+        commentId, commentTreeIdentifierDTO);
     Optional<CommentTree> optionalCommentTree = commentTreeRepository.findById(
         generateJwtTokenKey(commentTreeIdentifierDTO));
     if (optionalCommentTree.isPresent()) {
@@ -210,8 +233,13 @@ public class CommentTreeServiceImpl implements CommentTreeService {
           break; // Exit the loop once the ID is found and removed
         }
       }
-
+      Map<String, Object> resultMap = objectMapper.convertValue(
+          commentTreeToBeUpdated.getCommentTreeData(), Map.class);
+      redisTemplate.opsForValue()
+          .set(Constants.COMMENT_TREE_REDIS_KEY + commentTreeToBeUpdated.getCommentTreeId(), resultMap, redisTtl,
+              TimeUnit.SECONDS);
       commentTreeRepository.save(commentTreeToBeUpdated);
+
     }
   }
 

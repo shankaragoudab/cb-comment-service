@@ -166,4 +166,13 @@ public class CommentController {
     return new ResponseEntity<>(response, response.getResponseCode());
   }
 
+  @PostMapping("/v3/search")
+  public ResponseEntity<?> searchV3(@RequestBody SearchCriteria searchCriteria) {
+    ApiResponse response = commentService.paginatedCommentV3(searchCriteria);
+    if (response.getResponseCode().equals(HttpStatus.NOT_FOUND) && response.getResult().isEmpty()) {
+      return new ResponseEntity<>(response, HttpStatus.OK);
+    }
+    return new ResponseEntity<>(response, response.getResponseCode());
+  }
+
 }

@@ -130,4 +130,5 @@ public class Constants {
   public static final String CONTENT = "content";
   public static final String FETCH_RESULT_CONSTANT = ".fetchResult:";
   public static final String URI_CONSTANT = "URI: ";
+  public static final String COMMENT_TREE_REDIS_KEY = "commentTree_";
 }
