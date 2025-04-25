@@ -110,6 +110,7 @@ public class CommentServiceImpl implements CommentService {
 
   @Override
   public ResponseDTO addFirstCommentToCreateTree(JsonNode payload) {
+    log.info("CommentService::addFirstCommentToCreateTree:Payload received: {}", payload);
     validatePayload(Constants.ADD_FIRST_COMMENT_PAYLOAD_VALIDATION_FILE, payload);
     Comment comment = getPersistedComment(payload);
 
@@ -124,6 +125,7 @@ public class CommentServiceImpl implements CommentService {
 
   @Override
   public ResponseDTO addNewCommentToTree(JsonNode payload) {
+    log.info("CommentService::addNewCommentToTree:Payload received: {}", payload);
     validatePayload(Constants.ADD_NEW_COMMENT_PAYLOAD_VALIDATION_FILE, payload);
     Comment comment = getPersistedComment(payload);
     ((ObjectNode) payload).put(Constants.COMMENT_ID, comment.getCommentId());
@@ -152,6 +154,7 @@ public class CommentServiceImpl implements CommentService {
 
   @Override
   public ResponseDTO updateExistingComment(JsonNode paylaod) {
+    log.info("CommentService::updateExistingComment:Payload received: {}", paylaod);
     validatePayload(Constants.UPDATE_EXISTING_COMMENT_VALIDATION_FILE, paylaod);
     if (paylaod.get(Constants.COMMENT_ID) == null
         || paylaod.get(Constants.COMMENT_ID).asText().isEmpty()) {
@@ -198,6 +201,7 @@ public class CommentServiceImpl implements CommentService {
 
   @Override
   public CommentsResoponseDTO getComments(CommentTreeIdentifierDTO commentTreeIdentifierDTO) {
+    log.info("CommentService::getComments::Payload received: {}", commentTreeIdentifierDTO);
     CommentTree commentTree = commentTreeService.getCommentTree(commentTreeIdentifierDTO);
     JsonNode childNodes = commentTree.getCommentTreeData().get(Constants.CHILD_NODES);
     //check whether this is present in redis or not based on the key cmmentTreeId
@@ -269,7 +273,7 @@ public class CommentServiceImpl implements CommentService {
   @Override
   public Comment deleteCommentById(
       String commentId, CommentTreeIdentifierDTO commentTreeIdentifierDTO, String token) {
-    log.info("CommentServiceImpl::deleteCommentById: Deleting comment with ID: {}", commentId);
+    log.info("CommentServiceImpl::deleteCommentById: Deleting comment with ID: {} and commentTreeIdentifier: {}", commentId, commentTreeIdentifierDTO);
     String userId = accessTokenValidator.verifyUserToken(token);
     if (StringUtils.isBlank(userId) || userId.equalsIgnoreCase(Constants.UNAUTHORIZED_USER)) {
       throw new CommentException(Constants.ERROR, "Not a valid user");
