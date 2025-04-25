@@ -40,4 +40,5 @@ public interface CommentService {
 
   ApiResponse getCommentsLikedByUser(String courseId, String token);
 
+  ApiResponse paginatedCommentV3(SearchCriteria searchCriteria);
 }

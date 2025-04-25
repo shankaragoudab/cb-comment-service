@@ -769,6 +769,135 @@ public class CommentServiceImpl implements CommentService {
     return response;
   }
 
+  @Override
+  public ApiResponse paginatedCommentV3(SearchCriteria searchCriteria) {
+    log.info("CommentServiceImpl:paginatedCommentV3::inside the method:SearchCriteria Payload: {}", searchCriteria);
+    String error = validateSearchPayload(searchCriteria);
+    ApiResponse response = new ApiResponse();
+    response.setResponseCode(HttpStatus.OK);
+    if (StringUtils.isNotBlank(error)) {
+      return returnErrorMsg(error, HttpStatus.BAD_REQUEST, response);
+    }
+    String commentTreeId = "";
+    if (searchCriteria.getCommentTreeId().isEmpty()) {
+      CommentTreeIdentifierDTO commentTreeIdentifierDTO = new CommentTreeIdentifierDTO(
+          searchCriteria.getEntityType(), searchCriteria.getEntityId(),
+          searchCriteria.getWorkflow());
+      commentTreeId = generateJwtTokenKey(commentTreeIdentifierDTO);
+    } else {
+      commentTreeId = searchCriteria.getCommentTreeId();
+    }
+    Map<String, Object> commentResultMap = (Map<String, Object>) redisTemplate.opsForValue()
+        .get(Constants.COMMENT_TREE_REDIS_KEY + commentTreeId);
+    if (commentResultMap == null) {
+      log.info("CommentTreeService::getCommentTree:not found in redis");
+      Optional<CommentTree> optionalCommentTree = commentTreeRepository.findById(commentTreeId);
+      if (optionalCommentTree.isPresent()) {
+        log.info("CommentTreeService::getCommentTree:fetching from postgres");
+        commentResultMap = objectMapper.convertValue(
+            optionalCommentTree.get().getCommentTreeData(), Map.class);
+        redisTemplate.opsForValue()
+            .set(Constants.COMMENT_TREE_REDIS_KEY + commentTreeId, commentResultMap, redisTtl,
+                TimeUnit.SECONDS);
+      }
+    }
+    if (commentResultMap == null) {
+      response.getParams().setErr("CommentTree Not found");
+      return returnErrorMsg("CommentTree Not found", HttpStatus.NOT_FOUND, response);
+    }
+    JsonNode childNodes = objectMapper.valueToTree(
+        commentResultMap.get(Constants.FIRST_LEVEL_NODES));
+    List<String> childNodeList = objectMapper.convertValue(childNodes, List.class);
+    int limit = (searchCriteria.getLimit() != null) ? searchCriteria.getLimit() : defaultLimit;
+    int offset =
+        (searchCriteria.getOffset() != null) ? searchCriteria.getOffset() : defaultOffset;
+    Map<String, Object> resultMap = new HashMap<>();
+    if (!searchCriteria.isOverrideCache()) {
+      resultMap = (Map<String, Object>) redisTemplate.opsForValue()
+          .get(Constants.COMMENT_KEY + generateRedisJwtTokenKey(commentTreeId, offset, limit));
+    } else {
+      resultMap = fetchCommentFromPrimaryV3(offset, limit, childNodeList);
+      redisTemplate.opsForValue()
+          .set(Constants.COMMENT_KEY + generateRedisJwtTokenKey(commentTreeId, offset, limit),
+              resultMap, redisTtl,
+              TimeUnit.SECONDS);
+      response.setResult(resultMap);
+      return response;
+    }
+    if (MapUtils.isEmpty(resultMap)) {
+      log.info("CommentServiceImpl::getComments::fetch Comments from postgres");
+      resultMap = fetchCommentFromPrimaryV3(offset, limit, childNodeList);
+      redisTemplate.opsForValue()
+          .set(generateRedisJwtTokenKey(commentTreeId, offset, limit), resultMap, redisTtl,
+              TimeUnit.SECONDS);
+      response.setResult(resultMap);
+      return response;
+    } else {
+      log.info("CommentServiceImpl::getComments::fetch comments from redis");
+      response.setResult(resultMap);
+      return response;
+    }
+  }
+
+  private Map<String, Object> fetchCommentFromPrimaryV3(int offset, int limit,
+      List<String> childNodeList) {
+    log.info("CommentServiceImpl::getComments::fetch comments from redis");
+    Map<String, Object> resultMap = new HashMap<>();
+    Pageable pageable = PageRequest.of(offset, limit,
+        Sort.by(Sort.Direction.DESC, Constants.CREATED_DATE));
+    List<Comment> comments = commentRepository.findByCommentIdIn(childNodeList, pageable)
+        .getContent();
+    List<Object> userList = new ArrayList<>();
+    Set<String> uniqueTaggedUserIds = new HashSet<>();
+    Set<String> uniqueTaggedUserIdWithoutPrefixs = new HashSet<>();
+    Set<String> owneruserIds = new HashSet<>();
+    Set<String> owneruserIdWithoutPrefixs = new HashSet<>();
+// Iterate through each comment to extract tagged users
+    comments.forEach(comment -> {
+      JsonNode commentData = comment.getCommentData();
+      if (commentData != null
+          && commentData.has(Constants.COMMENT_SOURCE)
+          && commentData.get(Constants.COMMENT_SOURCE).has(Constants.USER_ID)) {
+        String userId = commentData.get(Constants.COMMENT_SOURCE).get(Constants.USER_ID).asText();
+        if (userId != null && !userId.isEmpty()) {
+          owneruserIds.add(Constants.USER_PREFIX + userId);
+          owneruserIdWithoutPrefixs.add(userId);
+        }
+      }
+      JsonNode taggedUsersNode = comment.getCommentData().get(Constants.TAGGED_USERS);
+      // Check if taggedUsersNode exists and is an array
+      if (taggedUsersNode != null && taggedUsersNode.isArray()) {
+        // Add each tagged user ID to the set to maintain uniqueness
+        taggedUsersNode.forEach(taggedUser -> {
+          uniqueTaggedUserIds.add(Constants.USER_PREFIX + taggedUser.asText());
+          // Add the tagged user ID without the prefix to uniqueTaggedUserIdWithoutPrefixs
+          uniqueTaggedUserIdWithoutPrefixs.add(taggedUser.asText());
+        });
+      }
+    });
+    List<String> commentedUserListWithoutPrefix = new ArrayList<>(owneruserIds);
+    userList = fetchUser.fetchDataForKeys(commentedUserListWithoutPrefix);
+    if (userList == null || userList.isEmpty()) {
+      log.info("CommentServiceImpl::getComments::fetching userDetails from primary");
+      // Handle the case where taggedUsers is empty or null
+      userList = fetchUser.fetchUserFromprimary(commentedUserListWithoutPrefix);
+    }
+    List<String> taggedUserList = new ArrayList<>(uniqueTaggedUserIds);
+    List<String> taggedUserListWithoutPrefix = new ArrayList<>(uniqueTaggedUserIdWithoutPrefixs);
+    List<Object> taggedUsers = fetchUser.fetchDataForKeys(taggedUserList);
+    if (taggedUsers == null || taggedUsers.isEmpty()) {
+      log.info("CommentServiceImpl::getComments::fetching taggedUserDetails from primary");
+      // Handle the case where taggedUsers is empty or null
+      taggedUsers = fetchUser.fetchUserFromprimary(taggedUserListWithoutPrefix);
+    }
+    CommentsResoponseDTO commentsResoponseDTO = new CommentsResoponseDTO(
+        comments, userList, taggedUsers);
+    Optional.ofNullable(comments)
+        .ifPresent(commentsList -> commentsResoponseDTO.setCommentCount(childNodeList.size()));
+    resultMap = objectMapper.convertValue(commentsResoponseDTO, Map.class);
+    return resultMap;
+  }
+
   private String validateReportCommentPayload(Map<String, Object> request) {
     StringBuffer str = new StringBuffer();
     List<String> errList = new ArrayList<>();
