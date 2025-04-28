@@ -28,6 +28,8 @@ public class CommentsResoponseDTO {
 
   private Map<String, Object> courseDetails;
 
+  private String commentTreeId;
+
   public CommentsResoponseDTO(CommentTree commentTree, List<Comment> comments, List<Object> userList) {
     this.commentTree = commentTree;
     this.comments = comments;
@@ -61,5 +63,15 @@ public class CommentsResoponseDTO {
     this.users = userList;
     this.taggedUsers = taggedUsers;
     this.courseDetails = courseDetails;
+  }
+
+  public CommentsResoponseDTO(List<Comment> comments,
+      List<Object> userList, List<Object> taggedUsers
+      , String commentTreeId) {
+    this.commentTree = commentTree;
+    this.comments = comments;
+    this.users = userList;
+    this.taggedUsers = taggedUsers;
+    this.commentTreeId = commentTreeId;
   }
 }
