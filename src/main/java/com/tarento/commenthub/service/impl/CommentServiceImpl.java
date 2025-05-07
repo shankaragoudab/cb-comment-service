@@ -820,7 +820,7 @@ public class CommentServiceImpl implements CommentService {
       resultMap = (Map<String, Object>) redisTemplate.opsForValue()
           .get(Constants.COMMENT_KEY + generateRedisJwtTokenKey(commentTreeId, offset, limit));
     } else {
-      resultMap = fetchCommentFromPrimaryV3(offset, limit, childNodeList);
+      resultMap = fetchCommentFromPrimaryV3(offset, limit, childNodeList, commentTreeId);
       redisTemplate.opsForValue()
           .set(Constants.COMMENT_KEY + generateRedisJwtTokenKey(commentTreeId, offset, limit),
               resultMap, redisTtl,
@@ -830,7 +830,7 @@ public class CommentServiceImpl implements CommentService {
     }
     if (MapUtils.isEmpty(resultMap)) {
       log.info("CommentServiceImpl::getComments::fetch Comments from postgres");
-      resultMap = fetchCommentFromPrimaryV3(offset, limit, childNodeList);
+      resultMap = fetchCommentFromPrimaryV3(offset, limit, childNodeList, commentTreeId);
       redisTemplate.opsForValue()
           .set(generateRedisJwtTokenKey(commentTreeId, offset, limit), resultMap, redisTtl,
               TimeUnit.SECONDS);
@@ -844,7 +844,7 @@ public class CommentServiceImpl implements CommentService {
   }
 
   private Map<String, Object> fetchCommentFromPrimaryV3(int offset, int limit,
-      List<String> childNodeList) {
+      List<String> childNodeList, String commentTreeId) {
     log.info("CommentServiceImpl::getComments::fetch comments from redis");
     Map<String, Object> resultMap = new HashMap<>();
     Pageable pageable = PageRequest.of(offset, limit,
@@ -895,7 +895,7 @@ public class CommentServiceImpl implements CommentService {
       taggedUsers = fetchUser.fetchUserFromprimary(taggedUserListWithoutPrefix);
     }
     CommentsResoponseDTO commentsResoponseDTO = new CommentsResoponseDTO(
-        comments, userList, taggedUsers);
+        comments, userList, taggedUsers, commentTreeId);
     Optional.ofNullable(comments)
         .ifPresent(commentsList -> commentsResoponseDTO.setCommentCount(childNodeList.size()));
     resultMap = objectMapper.convertValue(commentsResoponseDTO, Map.class);
