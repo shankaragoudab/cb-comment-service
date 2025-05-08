@@ -1,9 +1,10 @@
 package com.tarento.commenthub.dto;
 
+import jakarta.persistence.Embeddable;
 import java.io.Serializable;
 import java.util.Objects;
 import java.util.UUID;
-import javax.persistence.Embeddable;
+
 
 @Embeddable
 public class UserCourseCommentsId implements Serializable {

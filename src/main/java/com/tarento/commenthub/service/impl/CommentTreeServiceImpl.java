@@ -19,7 +19,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import lombok.extern.log4j.Log4j2;
-import net.bytebuddy.implementation.bytecode.Throw;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -199,7 +198,7 @@ public class CommentTreeServiceImpl implements CommentTreeService {
 
   @Override
   public void updateCommentTreeForDeletedComment(String commentId,
-      CommentTreeIdentifierDTO commentTreeIdentifierDTO) {
+      CommentTreeIdentifierDTO commentTreeIdentifierDTO, String parentId) {
     log.info("Updating comment tree for deleted comment with ID: {}, CommentTreeIdentifierDTO: {}",
         commentId, commentTreeIdentifierDTO);
     Optional<CommentTree> optionalCommentTree = commentTreeRepository.findById(
@@ -209,6 +208,7 @@ public class CommentTreeServiceImpl implements CommentTreeService {
       JsonNode jsonNode = commentTreeToBeUpdated.getCommentTreeData();
 
       boolean commentIdFound = false;
+
       // To remove commentId from childNodes
       ArrayNode childNodes = (ArrayNode) jsonNode.get(Constants.CHILD_NODES);
       for (int i = 0; i < childNodes.size(); i++) {
@@ -233,6 +233,45 @@ public class CommentTreeServiceImpl implements CommentTreeService {
           break; // Exit the loop once the ID is found and removed
         }
       }
+
+      ArrayNode comments = (ArrayNode) jsonNode.get(Constants.COMMENTS);
+      if (comments != null) {
+        for (int i = 0; i < comments.size(); i++) {
+          JsonNode commentNode = comments.get(i);
+
+          // Check if parentId is provided and matches the current commentId
+          if (parentId != null && !parentId.isEmpty() && parentId.equals(commentNode.get(Constants.COMMENT_ID).asText())) {
+            JsonNode childrenNode = commentNode.get(Constants.CHILDREN);
+            if (childrenNode != null) {
+              if (childrenNode.isArray()) {
+                // Handle children as an array
+                ArrayNode children = (ArrayNode) childrenNode;
+                for (int j = 0; j < children.size(); j++) {
+                  if (commentId.equals(children.get(j).get(Constants.COMMENT_ID).asText())) {
+                    children.remove(j);
+                    commentIdFound = true;
+
+                    // Clean up empty children array
+                    if (children.isEmpty() && commentNode instanceof ObjectNode) {
+                      ((ObjectNode) commentNode).remove(Constants.CHILDREN);
+                    }
+                    break;
+                  }
+                }
+              }
+            }
+            break; // Exit loop after processing the parent
+          }
+
+          // If parentId is not provided or does not match, check for top-level comment removal
+          if ((parentId == null || parentId.equalsIgnoreCase("null")  || parentId.isEmpty()) && commentId.equals(commentNode.get(Constants.COMMENT_ID).asText())) {
+            comments.remove(i);
+            commentIdFound = true;
+            break; // Exit the loop after removing the top-level comment
+          }
+        }
+      }
+
       Map<String, Object> resultMap = objectMapper.convertValue(
           commentTreeToBeUpdated.getCommentTreeData(), Map.class);
       redisTemplate.opsForValue()

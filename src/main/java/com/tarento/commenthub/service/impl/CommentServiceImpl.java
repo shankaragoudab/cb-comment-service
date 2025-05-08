@@ -272,7 +272,7 @@ public class CommentServiceImpl implements CommentService {
 
   @Override
   public Comment deleteCommentById(
-      String commentId, CommentTreeIdentifierDTO commentTreeIdentifierDTO, String token) {
+      String commentId, CommentTreeIdentifierDTO commentTreeIdentifierDTO, String token, String parentId) {
     log.info("CommentServiceImpl::deleteCommentById: Deleting comment with ID: {} and commentTreeIdentifier: {}", commentId, commentTreeIdentifierDTO);
     String userId = accessTokenValidator.verifyUserToken(token);
     if (StringUtils.isBlank(userId) || userId.equalsIgnoreCase(Constants.UNAUTHORIZED_USER)) {
@@ -297,7 +297,7 @@ public class CommentServiceImpl implements CommentService {
     comment.setStatus(Status.INACTIVE.name().toLowerCase());
     comment = commentRepository.save(comment);
     redisTemplate.opsForValue().getOperations().delete(COMMENT_KEY + commentId);
-    commentTreeService.updateCommentTreeForDeletedComment(commentId, commentTreeIdentifierDTO);
+    commentTreeService.updateCommentTreeForDeletedComment(commentId, commentTreeIdentifierDTO, parentId);
     return comment;
   }
 

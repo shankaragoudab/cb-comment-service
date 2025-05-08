@@ -2,20 +2,21 @@ package com.tarento.commenthub.entity;
 
 import com.tarento.commenthub.dto.UserCourseCommentsId;
 import com.vladmihalcea.hibernate.type.json.JsonBinaryType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Embeddable;
+import jakarta.persistence.EmbeddedId;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
 import java.io.Serializable;
 import java.util.List;
-import javax.persistence.Column;
-import javax.persistence.Embeddable;
-import javax.persistence.EmbeddedId;
-import javax.persistence.Entity;
-import javax.persistence.Table;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.Type;
 import com.vladmihalcea.hibernate.type.array.ListArrayType;
-import org.hibernate.annotations.TypeDef;
+
 
 @Getter
 @Setter
@@ -23,7 +24,7 @@ import org.hibernate.annotations.TypeDef;
 @NoArgsConstructor
 @Entity
 @Table(name = "user_course_comments_like")
-@TypeDef(name = "jsonb", typeClass = JsonBinaryType.class)
+
 @Embeddable
 public class UserCourseCommentLike implements Serializable {
 
@@ -31,7 +32,7 @@ public class UserCourseCommentLike implements Serializable {
   private UserCourseCommentsId id;
 
   @Column(name = "comment_ids")
-  @Type(type = "com.vladmihalcea.hibernate.type.array.ListArrayType")
+  @Type(ListArrayType.class)
   private List<String> commentIds; // Maps to the comment_ids column
 
 

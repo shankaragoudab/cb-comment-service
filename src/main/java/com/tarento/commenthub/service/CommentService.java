@@ -23,7 +23,7 @@ public interface CommentService {
   CommentsResoponseDTO getComments(CommentTreeIdentifierDTO commentTreeIdentifierDTO);
 
   Comment deleteCommentById(String commentId, CommentTreeIdentifierDTO commentTreeIdentifierDTO,
-      String token);
+      String token, String parentId);
 
 
   ApiResponse likeComment(Map<String, Object> likePayload);

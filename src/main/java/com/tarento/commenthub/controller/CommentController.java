@@ -75,6 +75,7 @@ public class CommentController {
       @RequestParam(name = "entityType") String entityType,
       @RequestParam(name = "entityId") String entityId,
       @RequestParam(name = "workflow") String workflow,
+      @RequestParam(name = "parentId", required = false) String parentId,
       @RequestHeader(Constants.X_AUTH_TOKEN) String token) {
 
     CommentTreeIdentifierDTO commentTreeIdentifierDTO = new CommentTreeIdentifierDTO();
@@ -82,7 +83,7 @@ public class CommentController {
     commentTreeIdentifierDTO.setEntityId(entityId);
     commentTreeIdentifierDTO.setWorkflow(workflow);
 
-    return commentService.deleteCommentById(commentId, commentTreeIdentifierDTO, token);
+    return commentService.deleteCommentById(commentId, commentTreeIdentifierDTO, token, parentId);
   }
 
   @PostMapping("/v1/setStatusToResolved")
