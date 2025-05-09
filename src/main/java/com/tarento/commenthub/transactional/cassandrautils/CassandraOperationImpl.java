@@ -1,19 +1,21 @@
 package com.tarento.commenthub.transactional.cassandrautils;
 
-import com.datastax.driver.core.*;
-import com.datastax.driver.core.querybuilder.Clause;
-import com.datastax.driver.core.querybuilder.Delete;
-import com.datastax.driver.core.querybuilder.QueryBuilder;
-import com.datastax.driver.core.querybuilder.Select;
-import com.datastax.driver.core.querybuilder.Select.Builder;
-import com.datastax.driver.core.querybuilder.Select.Where;
-import com.datastax.driver.core.querybuilder.Update;
+import com.datastax.oss.driver.api.core.CqlSession;
+import com.datastax.oss.driver.api.core.cql.BoundStatement;
+import com.datastax.oss.driver.api.core.cql.PreparedStatement;
+import com.datastax.oss.driver.api.core.cql.ResultSet;
+import com.datastax.oss.driver.api.core.cql.SimpleStatement;
+import com.datastax.oss.driver.api.querybuilder.QueryBuilder;
+import com.datastax.oss.driver.api.querybuilder.delete.Delete;
+import com.datastax.oss.driver.api.querybuilder.select.Select;
+import com.datastax.oss.driver.api.querybuilder.term.Term;
 import com.tarento.commenthub.constant.Constants;
 import com.tarento.commenthub.transactional.utils.ApiResponse;
 
 import java.util.*;
 import java.util.Map.Entry;
 
+import java.util.stream.Collectors;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.slf4j.Logger;
@@ -36,37 +38,31 @@ public class CassandraOperationImpl implements CassandraOperation {
 
     private Select processQuery(String keyspaceName, String tableName, Map<String, Object> propertyMap,
                                 List<String> fields) {
-        Select selectQuery = null;
-
-        Builder selectBuilder;
+        Select select;
         if (CollectionUtils.isNotEmpty(fields)) {
-            String[] dbFields = fields.toArray(new String[fields.size()]);
-            selectBuilder = QueryBuilder.select(dbFields);
+            select = QueryBuilder.selectFrom(keyspaceName, tableName).columns(fields);
         } else {
-            selectBuilder = QueryBuilder.select().all();
+            select = QueryBuilder.selectFrom(keyspaceName, tableName).all();
         }
-        selectQuery = selectBuilder.from(keyspaceName, tableName);
-        if (MapUtils.isNotEmpty(propertyMap)) {
-            Where selectWhere = selectQuery.where();
-            for (Entry<String, Object> entry : propertyMap.entrySet()) {
-                if (entry.getValue() instanceof List) {
-                    List<Object> list = (List) entry.getValue();
-                    if (null != list) {
-                        Object[] propertyValues = list.toArray(new Object[list.size()]);
-                        Clause clause = QueryBuilder.in(entry.getKey(), propertyValues);
-                        selectWhere.and(clause);
-
-                    }
-                } else {
-
-                    Clause clause = QueryBuilder.eq(entry.getKey(), entry.getValue());
-                    selectWhere.and(clause);
-
+        if (MapUtils.isEmpty(propertyMap)) {
+            return select; // Build and return the query
+        }
+        for (Map.Entry<String, Object> entry : propertyMap.entrySet()) {
+            String columnName = entry.getKey();
+            Object value = entry.getValue();
+            if (value instanceof List) {
+                List<?> valueList = (List<?>) value;
+                if (CollectionUtils.isNotEmpty(valueList)) {
+                    List<Term> terms = valueList.stream()
+                        .map(QueryBuilder::literal)
+                        .collect(Collectors.toList());
+                    select = select.whereColumn(columnName).in(terms);
                 }
-                selectQuery.allowFiltering();
+            } else {
+                select = select.whereColumn(columnName).isEqualTo(QueryBuilder.literal(value));
             }
         }
-        return selectQuery;
+        return select;
     }
 
     @Override
@@ -76,7 +72,8 @@ public class CassandraOperationImpl implements CassandraOperation {
         List<Map<String, Object>> response = new ArrayList<>();
         try {
             selectQuery = processQuery(keyspaceName, tableName, propertyMap, fields);
-            ResultSet results = connectionManager.getSession(keyspaceName).execute(selectQuery);
+            CqlSession session = connectionManager.getSession(keyspaceName);
+            ResultSet results = session.execute(selectQuery.build());
             response = CassandraUtil.createResponse(results);
             logger.info(response.toString());
 
@@ -89,21 +86,16 @@ public class CassandraOperationImpl implements CassandraOperation {
     @Override
     public Object insertRecord(String keyspaceName, String tableName, Map<String, Object> request) {
         ApiResponse response = new ApiResponse();
-        String query = CassandraUtil.getPreparedStatement(keyspaceName, tableName, request);
         try {
-            PreparedStatement statement = connectionManager.getSession(keyspaceName).prepare(query);
-            BoundStatement boundStatement = new BoundStatement(statement);
-            Iterator<Object> iterator = request.values().iterator();
-            Object[] array = new Object[request.keySet().size()];
-            int i = 0;
-            while (iterator.hasNext()) {
-                array[i++] = iterator.next();
-            }
-            connectionManager.getSession(keyspaceName).execute(boundStatement.bind(array));
+            String query = CassandraUtil.getPreparedStatement(keyspaceName, tableName, request);
+            CqlSession session = connectionManager.getSession(keyspaceName);
+            com.datastax.oss.driver.api.core.cql.PreparedStatement statement = session.prepare(query);
+            com.datastax.oss.driver.api.core.cql.BoundStatement boundStatement = statement.bind(request.values().toArray());
+            session.execute(boundStatement);
             response.put(Constants.RESPONSE, Constants.SUCCESS);
         } catch (Exception e) {
             String errMsg = String.format("Exception occurred while inserting record to %s %s", tableName, e.getMessage());
-            logger.error(errMsg);
+            logger.error("Error inserting record into {}: {}", tableName, e.getMessage());
             response.put(Constants.RESPONSE, Constants.FAILED);
             response.put(Constants.ERROR_MESSAGE, errMsg);
         }
@@ -111,80 +103,52 @@ public class CassandraOperationImpl implements CassandraOperation {
     }
     @Override
     public List<Map<String, Object>> getRecordsByPropertiesWithoutFiltering(String keyspaceName, String tableName, Map<String, Object> propertyMap, List<String> fields, Integer limit) {
-        Select selectQuery = null;
         List<Map<String, Object>> response = new ArrayList<>();
         try {
-            selectQuery = processQueryWithoutFiltering(keyspaceName, tableName, propertyMap, fields);
-            if (limit != null) {
-                selectQuery = selectQuery.limit(limit);
-            }
-            ResultSet results = connectionManager.getSession(keyspaceName).execute(selectQuery);
+            Select selectQuery = null;
+            selectQuery = processQuery(keyspaceName, tableName, propertyMap, fields);
+
+            if (limit != null) selectQuery = selectQuery.limit(limit);
+            String queryString = selectQuery.toString();
+            SimpleStatement statement = SimpleStatement.newInstance(queryString);
+            ResultSet results = connectionManager.getSession(keyspaceName).execute(statement);
             response = CassandraUtil.createResponse(results);
 
         } catch (Exception e) {
-            logger.error(Constants.EXCEPTION_MSG_FETCH + tableName + " : " + e.getMessage(), e);
+            logger.error("Error fetching records from {}: {}", tableName, e.getMessage());
         }
         return response;
     }
 
     private Select processQueryWithoutFiltering(String keyspaceName, String tableName, Map<String, Object> propertyMap,
         List<String> fields) {
-        Select selectQuery = null;
-        Builder selectBuilder;
+        Select selectQuery;
         if (CollectionUtils.isNotEmpty(fields)) {
-            String[] dbFields = fields.toArray(new String[fields.size()]);
-            selectBuilder = QueryBuilder.select(dbFields);
+            selectQuery = QueryBuilder.selectFrom(keyspaceName, tableName).columns(fields);
         } else {
-            selectBuilder = QueryBuilder.select().all();
+            selectQuery = QueryBuilder.selectFrom(keyspaceName, tableName).all();
         }
-        selectQuery = selectBuilder.from(keyspaceName, tableName);
         if (MapUtils.isNotEmpty(propertyMap)) {
-            Where selectWhere = selectQuery.where();
-            for (Entry<String, Object> entry : propertyMap.entrySet()) {
-                if (entry.getValue() instanceof List) {
-                    List<Object> list = (List) entry.getValue();
-                    if (null != list) {
-                        Object[] propertyValues = list.toArray(new Object[list.size()]);
-                        Clause clause = QueryBuilder.in(entry.getKey(), propertyValues);
-                        selectWhere.and(clause);
+            for (Map.Entry<String, Object> entry : propertyMap.entrySet()) {
+                String columnName = entry.getKey();
+                Object value = entry.getValue();
+                if (value instanceof List) {
+                    List<?> valueList = (List<?>) value;
+                    if (CollectionUtils.isNotEmpty(valueList)) {
+                        List<Term> terms = valueList.stream()
+                            .map(QueryBuilder::literal)
+                            .collect(Collectors.toList());
+                        selectQuery = selectQuery.whereColumn(columnName).in(terms);
                     }
                 } else {
-                    Clause clause = QueryBuilder.eq(entry.getKey(), entry.getValue());
-                    selectWhere.and(clause);
+                    selectQuery = selectQuery.whereColumn(columnName).isEqualTo(QueryBuilder.literal(value));
                 }
             }
         }
         return selectQuery;
     }
 
-    @Override
-    public Map<String, Object> updateRecordByCompositeKey(String keyspaceName, String tableName, Map<String, Object> updateAttributes,
-        Map<String, Object> compositeKey) {
-        Map<String, Object> response = new HashMap<>();
-        Statement updateQuery = null;
-        try {
-            Session session = connectionManager.getSession(keyspaceName);
-            Update update = QueryBuilder.update(keyspaceName, tableName);
-            Update.Assignments assignments = update.with();
-            Update.Where where = update.where();
-            updateAttributes.entrySet().stream().forEach(x -> {
-                assignments.and(QueryBuilder.set(x.getKey(), x.getValue()));
-            });
-            compositeKey.entrySet().stream().forEach(x -> {
-                where.and(QueryBuilder.eq(x.getKey(), x.getValue()));
-            });
-            updateQuery = where;
-            session.execute(updateQuery);
-            response.put(Constants.RESPONSE, Constants.SUCCESS);
-        } catch (Exception e) {
-            String errMsg = String.format("Exception occurred while updating record to %s %s", tableName, e.getMessage());
-            logger.error(errMsg);
-            response.put(Constants.RESPONSE, Constants.FAILED);
-            response.put(Constants.ERROR_MESSAGE, errMsg);
-            throw e;
-        }
-        return response;
-    }
+
   public List<Map<String, Object>> getRecordsByPropertiesWithoutFiltering(String keyspaceName,
       String tableName,
       Map<String, Object> propertyMap, List<String> fields) {
@@ -192,22 +156,4 @@ public class CassandraOperationImpl implements CassandraOperation {
         null);
   }
 
-
-    @Override
-    public void deleteRecord(String keyspaceName, String tableName, Map<String, Object> compositeKeyMap) {
-        Delete delete = null;
-        try {
-            delete = QueryBuilder.delete().from(keyspaceName, tableName);
-            Delete.Where deleteWhere = delete.where();
-            compositeKeyMap.entrySet().stream().forEach(x -> {
-                Clause clause = QueryBuilder.eq(x.getKey(), x.getValue());
-                deleteWhere.and(clause);
-            });
-            connectionManager.getSession(keyspaceName).execute(delete);
-        } catch (Exception e) {
-            logger.error(String.format("CassandraOperationImpl: deleteRecord by composite key. %s %s %s",
-                Constants.EXCEPTION_MSG_DELETE, tableName, e.getMessage()));
-            throw e;
-        }
-    }
 }

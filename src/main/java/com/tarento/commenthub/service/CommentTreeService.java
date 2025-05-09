@@ -16,7 +16,7 @@ public interface CommentTreeService {
   CommentTree getCommentTree(CommentTreeIdentifierDTO commentTreeIdentifierDTO);
 
   void updateCommentTreeForDeletedComment(String commentId,
-      CommentTreeIdentifierDTO commentTreeIdentifierDTO);
+      CommentTreeIdentifierDTO commentTreeIdentifierDTO, String parentId);
 
   List<CommentTree> getAllCommentTreeForMultipleWorkflows(String entityType, String entityId,
       List<String> workflows);

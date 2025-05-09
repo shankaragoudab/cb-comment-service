@@ -3,6 +3,7 @@ package com.tarento.commenthub.authentication.util;
 import com.tarento.commenthub.authentication.model.KeyData;
 import com.tarento.commenthub.constant.Constants;
 import com.tarento.commenthub.transactional.utils.PropertiesCache;
+import jakarta.annotation.PostConstruct;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,7 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import javax.annotation.PostConstruct;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;

@@ -272,7 +272,7 @@ public class CommentServiceImpl implements CommentService {
 
   @Override
   public Comment deleteCommentById(
-      String commentId, CommentTreeIdentifierDTO commentTreeIdentifierDTO, String token) {
+      String commentId, CommentTreeIdentifierDTO commentTreeIdentifierDTO, String token, String parentId) {
     log.info("CommentServiceImpl::deleteCommentById: Deleting comment with ID: {} and commentTreeIdentifier: {}", commentId, commentTreeIdentifierDTO);
     String userId = accessTokenValidator.verifyUserToken(token);
     if (StringUtils.isBlank(userId) || userId.equalsIgnoreCase(Constants.UNAUTHORIZED_USER)) {
@@ -297,7 +297,7 @@ public class CommentServiceImpl implements CommentService {
     comment.setStatus(Status.INACTIVE.name().toLowerCase());
     comment = commentRepository.save(comment);
     redisTemplate.opsForValue().getOperations().delete(COMMENT_KEY + commentId);
-    commentTreeService.updateCommentTreeForDeletedComment(commentId, commentTreeIdentifierDTO);
+    commentTreeService.updateCommentTreeForDeletedComment(commentId, commentTreeIdentifierDTO, parentId);
     return comment;
   }
 
@@ -880,19 +880,25 @@ public class CommentServiceImpl implements CommentService {
       }
     });
     List<String> commentedUserListWithoutPrefix = new ArrayList<>(owneruserIds);
-    userList = fetchUser.fetchDataForKeys(commentedUserListWithoutPrefix);
-    if (userList == null || userList.isEmpty()) {
-      log.info("CommentServiceImpl::getComments::fetching userDetails from primary");
-      // Handle the case where taggedUsers is empty or null
-      userList = fetchUser.fetchUserFromprimary(commentedUserListWithoutPrefix);
+    if (commentedUserListWithoutPrefix != null && !commentedUserListWithoutPrefix.isEmpty()) {
+      userList = fetchUser.fetchDataForKeys(commentedUserListWithoutPrefix);
+      if (userList == null || userList.isEmpty()) {
+        log.info("CommentServiceImpl::getComments::fetching userDetails from primary");
+        // Handle the case where userList is empty or null
+        userList = fetchUser.fetchUserFromprimary(commentedUserListWithoutPrefix);
+      }
     }
     List<String> taggedUserList = new ArrayList<>(uniqueTaggedUserIds);
     List<String> taggedUserListWithoutPrefix = new ArrayList<>(uniqueTaggedUserIdWithoutPrefixs);
-    List<Object> taggedUsers = fetchUser.fetchDataForKeys(taggedUserList);
-    if (taggedUsers == null || taggedUsers.isEmpty()) {
-      log.info("CommentServiceImpl::getComments::fetching taggedUserDetails from primary");
-      // Handle the case where taggedUsers is empty or null
-      taggedUsers = fetchUser.fetchUserFromprimary(taggedUserListWithoutPrefix);
+    List<Object> taggedUsers = new ArrayList<>(); // Define and initialize outside the if block
+
+    if (taggedUserList != null && !taggedUserList.isEmpty()) {
+      taggedUsers = fetchUser.fetchDataForKeys(taggedUserList);
+      if (taggedUsers == null || taggedUsers.isEmpty()) {
+        log.info("CommentServiceImpl::getComments::fetching taggedUserDetails from primary");
+        // Handle the case where taggedUsers is empty or null
+        taggedUsers = fetchUser.fetchUserFromprimary(taggedUserListWithoutPrefix);
+      }
     }
     CommentsResoponseDTO commentsResoponseDTO = new CommentsResoponseDTO(
         comments, userList, taggedUsers, commentTreeId);
