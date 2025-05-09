@@ -888,11 +888,15 @@ public class CommentServiceImpl implements CommentService {
     }
     List<String> taggedUserList = new ArrayList<>(uniqueTaggedUserIds);
     List<String> taggedUserListWithoutPrefix = new ArrayList<>(uniqueTaggedUserIdWithoutPrefixs);
-    List<Object> taggedUsers = fetchUser.fetchDataForKeys(taggedUserList);
-    if (taggedUsers == null || taggedUsers.isEmpty()) {
-      log.info("CommentServiceImpl::getComments::fetching taggedUserDetails from primary");
-      // Handle the case where taggedUsers is empty or null
-      taggedUsers = fetchUser.fetchUserFromprimary(taggedUserListWithoutPrefix);
+    List<Object> taggedUsers = new ArrayList<>(); // Define and initialize outside the if block
+
+    if (taggedUserList != null && !taggedUserList.isEmpty()) {
+      taggedUsers = fetchUser.fetchDataForKeys(taggedUserList);
+      if (taggedUsers == null || taggedUsers.isEmpty()) {
+        log.info("CommentServiceImpl::getComments::fetching taggedUserDetails from primary");
+        // Handle the case where taggedUsers is empty or null
+        taggedUsers = fetchUser.fetchUserFromprimary(taggedUserListWithoutPrefix);
+      }
     }
     CommentsResoponseDTO commentsResoponseDTO = new CommentsResoponseDTO(
         comments, userList, taggedUsers, commentTreeId);
