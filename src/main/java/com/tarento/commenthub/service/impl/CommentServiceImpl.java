@@ -880,11 +880,13 @@ public class CommentServiceImpl implements CommentService {
       }
     });
     List<String> commentedUserListWithoutPrefix = new ArrayList<>(owneruserIds);
-    userList = fetchUser.fetchDataForKeys(commentedUserListWithoutPrefix);
-    if (userList == null || userList.isEmpty()) {
-      log.info("CommentServiceImpl::getComments::fetching userDetails from primary");
-      // Handle the case where taggedUsers is empty or null
-      userList = fetchUser.fetchUserFromprimary(commentedUserListWithoutPrefix);
+    if (commentedUserListWithoutPrefix != null && !commentedUserListWithoutPrefix.isEmpty()) {
+      userList = fetchUser.fetchDataForKeys(commentedUserListWithoutPrefix);
+      if (userList == null || userList.isEmpty()) {
+        log.info("CommentServiceImpl::getComments::fetching userDetails from primary");
+        // Handle the case where userList is empty or null
+        userList = fetchUser.fetchUserFromprimary(commentedUserListWithoutPrefix);
+      }
     }
     List<String> taggedUserList = new ArrayList<>(uniqueTaggedUserIds);
     List<String> taggedUserListWithoutPrefix = new ArrayList<>(uniqueTaggedUserIdWithoutPrefixs);
