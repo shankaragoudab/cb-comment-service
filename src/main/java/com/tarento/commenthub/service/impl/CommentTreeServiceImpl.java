@@ -235,40 +235,40 @@ public class CommentTreeServiceImpl implements CommentTreeService {
       }
 
       ArrayNode comments = (ArrayNode) jsonNode.get(Constants.COMMENTS);
-      if (comments != null) {
-        for (int i = 0; i < comments.size(); i++) {
-          JsonNode commentNode = comments.get(i);
+      if (comments == null) {
+        return;
+      }
 
-          // Check if parentId is provided and matches the current commentId
-          if (parentId != null && !parentId.isEmpty() && parentId.equals(commentNode.get(Constants.COMMENT_ID).asText())) {
-            JsonNode childrenNode = commentNode.get(Constants.CHILDREN);
-            if (childrenNode != null) {
-              if (childrenNode.isArray()) {
-                // Handle children as an array
-                ArrayNode children = (ArrayNode) childrenNode;
-                for (int j = 0; j < children.size(); j++) {
-                  if (commentId.equals(children.get(j).get(Constants.COMMENT_ID).asText())) {
-                    children.remove(j);
-                    commentIdFound = true;
+      for (int i = 0; i < comments.size(); i++) {
+        JsonNode commentNode = comments.get(i);
+        String currentCommentId = commentNode.get(Constants.COMMENT_ID).asText();
 
-                    // Clean up empty children array
-                    if (children.isEmpty() && commentNode instanceof ObjectNode) {
-                      ((ObjectNode) commentNode).remove(Constants.CHILDREN);
-                    }
-                    break;
-                  }
+        // Case 1: Remove child comment if parentId matches
+        if (parentId != null && !parentId.isEmpty() && parentId.equals(currentCommentId)) {
+          ArrayNode children = (ArrayNode) commentNode.get(Constants.CHILDREN);
+          if (children != null) {
+            for (int j = 0; j < children.size(); j++) {
+              if (commentId.equals(children.get(j).get(Constants.COMMENT_ID).asText())) {
+                children.remove(j);
+                commentIdFound = true;
+
+                // Remove empty children array
+                if (children.isEmpty() && commentNode instanceof ObjectNode) {
+                  ((ObjectNode) commentNode).remove(Constants.CHILDREN);
                 }
+                break;
               }
             }
-            break; // Exit loop after processing the parent
           }
+          break;
+        }
 
-          // If parentId is not provided or does not match, check for top-level comment removal
-          if ((parentId == null || parentId.equalsIgnoreCase("null")  || parentId.isEmpty()) && commentId.equals(commentNode.get(Constants.COMMENT_ID).asText())) {
-            comments.remove(i);
-            commentIdFound = true;
-            break; // Exit the loop after removing the top-level comment
-          }
+        // Case 2: Remove top-level comment
+        if ((parentId == null || "null".equalsIgnoreCase(parentId) || parentId.isEmpty()) &&
+            commentId.equalsIgnoreCase(currentCommentId)) {
+          comments.remove(i);
+          commentIdFound = true;
+          break;
         }
       }
 
