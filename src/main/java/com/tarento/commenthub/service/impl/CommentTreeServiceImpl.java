@@ -248,7 +248,7 @@ public class CommentTreeServiceImpl implements CommentTreeService {
           ArrayNode children = (ArrayNode) commentNode.get(Constants.CHILDREN);
           if (children != null) {
             for (int j = 0; j < children.size(); j++) {
-              if (commentId.equals(children.get(j).get(Constants.COMMENT_ID).asText())) {
+              if (commentId.equalsIgnoreCase(children.get(j).get(Constants.COMMENT_ID).asText())) {
                 children.remove(j);
                 commentIdFound = true;
 
