@@ -1,15 +1,16 @@
 package com.tarento.commenthub.service.impl;
 
-import static com.tarento.commenthub.constant.Constants.COMMENT_KEY;
-import static com.tarento.commenthub.constant.Constants.COMMENT_TREE_REDIS_KEY;
+import static com.tarento.commenthub.constant.Constants.*;
 import static com.tarento.commenthub.utility.CommentsUtility.containsNull;
 
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
+import com.auth0.jwt.interfaces.DecodedJWT;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.uuid.Generators;
 import com.networknt.schema.JsonSchema;
@@ -38,20 +39,15 @@ import com.tarento.commenthub.transactional.utils.ApiResponse;
 import com.tarento.commenthub.utility.Status;
 import java.io.InputStream;
 import java.sql.Timestamp;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+
+import com.tarento.commenthub.utility.notificationutill.HelperMethodService;
+import com.tarento.commenthub.utility.notificationutill.NotificationTriggerService;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -108,6 +104,12 @@ public class CommentServiceImpl implements CommentService {
 
   @Autowired
   private ContentService contentService;
+
+  @Autowired
+  private NotificationTriggerService notificationTriggerService;
+
+  @Autowired
+  private HelperMethodService helperMethodService;
 
   @Override
   public ResponseDTO addFirstCommentToCreateTree(JsonNode payload) {
@@ -167,6 +169,10 @@ public class CommentServiceImpl implements CommentService {
         && !commentToBeUpdated.getCommentData().get(Constants.LIKE).isNull()) {
       commentData.put(Constants.LIKE, commentToBeUpdated.getCommentData().get(Constants.LIKE));
     }
+
+    List<String> newlyAddedMentionedUsers = helperMethodService.processMentionedUsers(
+            commentToBeUpdated.getCommentData(), commentData);
+
     commentToBeUpdated.setCommentData(commentData);
 
     Timestamp currentTime = new Timestamp(System.currentTimeMillis());
@@ -191,7 +197,7 @@ public class CommentServiceImpl implements CommentService {
 
       // Create and return the response
       ResponseDTO responseDTO = new ResponseDTO(commentTree, updatedComment);
-
+      helperMethodService.sendNotificationToUser(paylaod, paylaod.get(COMMENT_ID).asText(), newlyAddedMentionedUsers);
       return responseDTO;
     } catch (Exception e) {
       log.error("Error occurred while updating comment or fetching CommentTree for commentId: {}", commentToBeUpdated.getCommentId(), e);
@@ -325,6 +331,22 @@ public class CommentServiceImpl implements CommentService {
   private Comment getPersistedComment(JsonNode commentPayload) {
     Comment comment = new Comment();
     String commentId = generateCommentId();
+    JsonNode commentDataNode = commentPayload.get(COMMENT_DATA);
+    JsonNode mentionedUsersNode = commentDataNode.get(MENTIONED_USERS);
+    List<String> userIdList = new ArrayList<>();
+    if (mentionedUsersNode != null && mentionedUsersNode.isArray() && mentionedUsersNode.size() > 0) {
+      Map<String, JsonNode> uniqueUserMap = new LinkedHashMap<>();
+      mentionedUsersNode.forEach(node -> {
+        String userid = node.path(Constants.USER_ID).asText(null);
+        if (StringUtils.isNotBlank(userid) && !uniqueUserMap.containsKey(userid)) {
+          uniqueUserMap.put(userid, node);
+        }
+      });
+      ArrayNode cleanArray = objectMapper.createArrayNode();
+      uniqueUserMap.values().forEach(cleanArray::add);
+      ((ObjectNode) commentDataNode).set(MENTIONED_USERS, cleanArray);
+      userIdList.addAll(uniqueUserMap.keySet());
+    }
     comment.setCommentId(commentId);
     comment.setCommentData(commentPayload.get(Constants.COMMENT_DATA));
     // Set Status default value 'active' for new comment
@@ -343,7 +365,7 @@ public class CommentServiceImpl implements CommentService {
       // Store the serialized JSON string in Redis
       redisTemplate.opsForValue()
           .set(COMMENT_KEY + comment.getCommentId(), commentJson, redisTtl, TimeUnit.SECONDS);
-
+      helperMethodService.sendNotificationToUser(commentPayload,commentId,userIdList);
       return comment;
     } catch (Exception e) {
       log.error("Error occurred while storing comment in Redis for commentId: {}", comment.getCommentId(), e);
@@ -628,9 +650,9 @@ public class CommentServiceImpl implements CommentService {
     }
     // Collect unique IDs
     Map<String, Object> courseDetails = new HashMap<>();
-    if (commentTree.getCommentTreeData().has(Constants.ENTITY_ID)
-        && !commentTree.getCommentTreeData().get(Constants.ENTITY_ID).isNull()) {
-      String courseId = commentTree.getCommentTreeData().get(Constants.ENTITY_ID).asText();
+    if (commentTree.getCommentTreeData().has(ENTITY_ID)
+        && !commentTree.getCommentTreeData().get(ENTITY_ID).isNull()) {
+      String courseId = commentTree.getCommentTreeData().get(ENTITY_ID).asText();
       courseDetails = fetchCourseDetails(courseId);
 
     }
@@ -1121,7 +1143,7 @@ public class CommentServiceImpl implements CommentService {
     }
 
     String jwtToken = JWT.create()
-        .withClaim(Constants.ENTITY_ID, commentTreeIdentifierDTO.getEntityId())
+        .withClaim(ENTITY_ID, commentTreeIdentifierDTO.getEntityId())
         .withClaim(Constants.ENTITY_TYPE, commentTreeIdentifierDTO.getEntityType())
         .withClaim(Constants.WORKFLOW, commentTreeIdentifierDTO.getWorkflow())
         .sign(Algorithm.HMAC256(jwtSecretKey));
@@ -1191,6 +1213,5 @@ public class CommentServiceImpl implements CommentService {
       }
     return "";
   }
-
 
 }
