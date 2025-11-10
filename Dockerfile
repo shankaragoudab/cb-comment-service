@@ -1,4 +1,4 @@
-FROM openjdk:17-slim-bookworm
+FROM eclipse-temurin:17-jdk-bookworm
 
 # Update security patches including glibc fix
 RUN apt-get update \
