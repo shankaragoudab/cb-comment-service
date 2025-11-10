@@ -1,6 +1,8 @@
 FROM openjdk:17.0.1-jdk-slim
 
+# Update security patches including glibc fix
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y \
         curl \
         libxrender1 \
@@ -9,7 +11,9 @@ RUN apt-get update \
         libxtst6 \
         xfonts-75dpi \
         xfonts-base \
-        xz-utils
+        xz-utils \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 
 COPY cb-comment-service-0.0.1-SNAPSHOT.jar /opt/
