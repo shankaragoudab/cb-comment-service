@@ -1,4 +1,4 @@
-FROM openjdk:17.0.1-jdk-slim
+FROM openjdk:17-slim-bookworm
 
 # Update security patches including glibc fix
 RUN apt-get update \
