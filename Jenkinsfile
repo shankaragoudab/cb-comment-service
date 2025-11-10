@@ -53,7 +53,7 @@ node() {
                         def imageFullName = "${hub_org}/${JOB_BASE_NAME}:${build_tag}"
                         echo "🔍 Starting Trivy scan for image: ${imageFullName}"
 
-                        sh '''
+                        sh """
                             mkdir -p trivy-reports
 
                             # Full Trivy scan in JSON format
@@ -67,7 +67,7 @@ node() {
                             echo "================== TRIVY VULNERABILITY SUMMARY =================="
                             jq -r '.Results[].Vulnerabilities[].Severity' trivy-reports/trivy-report.json | sort | uniq -c | awk '{print $2": "$1}'
                             echo "================================================================="
-                        '''
+                        """
                     }
                     // Archive the scan reports
                     archiveArtifacts artifacts: 'trivy-reports/*.json', fingerprint: true
