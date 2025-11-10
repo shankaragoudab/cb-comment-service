@@ -1,4 +1,4 @@
-FROM eclipse-temurin:17-jdk-bookworm
+FROM eclipse-temurin:17-jdk-alpine
 
 # Update security patches including glibc fix
 RUN apt-get update \
