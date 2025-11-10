@@ -1,12 +1,12 @@
 FROM eclipse-temurin:17-jdk-jammy
 
-# Update security patches including glibc fix
+# Update all security patches and install required dependencies
 RUN apt-get update \
-    && apt-get upgrade -y \
+    && apt-get dist-upgrade -y \
     && apt-get install -y \
         curl \
         libxrender1 \
-        libjpeg62-turbo \
+        libjpeg-turbo8 \
         fontconfig \
         libxtst6 \
         xfonts-75dpi \
