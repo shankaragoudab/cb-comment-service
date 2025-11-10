@@ -57,7 +57,7 @@ node() {
                             mkdir -p trivy-reports
 
                             # Full Trivy scan in JSON format
-                            trivy image --quiet --format json --output trivy-reports/trivy-report.json ${hub_org}/${JOB_BASE_NAME}:${build_tag}
+                            trivy image --quiet --format json --output trivy-reports/trivy-report.json ${imageFullName}
 
                             # Extract by severity
                             jq '.Results[].Vulnerabilities[] | select(.Severity=="CRITICAL")' trivy-reports/trivy-report.json > trivy-reports/critical.json || true
@@ -65,12 +65,13 @@ node() {
                             jq '.Results[].Vulnerabilities[] | select(.Severity=="MEDIUM")' trivy-reports/trivy-report.json > trivy-reports/medium.json || true
 
                             echo "================== TRIVY VULNERABILITY SUMMARY =================="
-                            jq -r '.Results[].Vulnerabilities[].Severity' trivy-reports/trivy-report.json | sort | uniq -c | awk '{print $2": "$1}'
+                            jq -r '.Results[].Vulnerabilities[].Severity' trivy-reports/trivy-report.json | sort | uniq -c | awk '{print \$2": "\$1}'
                             echo "================================================================="
                         """
+
+                        // Archive the scan reports
+                        archiveArtifacts artifacts: 'trivy-reports/*.json', fingerprint: true
                     }
-                    // Archive the scan reports
-                    archiveArtifacts artifacts: 'trivy-reports/*.json', fingerprint: true
                 }
             }
 
