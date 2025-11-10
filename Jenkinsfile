@@ -8,53 +8,83 @@ node() {
         String ANSI_YELLOW = "\u001B[33m"
 
         ansiColor('xterm') {
-                stage('Checkout') {
-                    if (!env.hub_org) {
-                        println(ANSI_BOLD + ANSI_RED + "Uh Oh! Please set a Jenkins environment variable named hub_org with value as registery/sunbidrded" + ANSI_NORMAL)
-                        error 'Please resolve the errors and rerun..'
-                    } else
-                        println(ANSI_BOLD + ANSI_GREEN + "Found environment variable named hub_org with value as: " + hub_org + ANSI_NORMAL)
+            stage('Checkout') {
+                if (!env.hub_org) {
+                    println(ANSI_BOLD + ANSI_RED + "Uh Oh! Please set a Jenkins environment variable named hub_org with value as registry/sunbirded" + ANSI_NORMAL)
+                    error 'Please resolve the errors and rerun..'
+                } else {
+                    println(ANSI_BOLD + ANSI_GREEN + "Found environment variable named hub_org with value as: " + hub_org + ANSI_NORMAL)
                 }
-                cleanWs()
-                checkout scm
-                commit_hash = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-	        build_tag = sh(script: "echo " + params.github_release_tag.split('/')[-1] + "_" + commit_hash + "_" + env.BUILD_NUMBER, returnStdout: true).trim()
-                echo "build_tag: " + build_tag
+            }
 
-        if(params.enable_code_analysis){
-            stage('Code analysis'){
-               build job: "Build/CodeReview/${JOB_BASE_NAME}", wait: true
-	     }
-        }
+            cleanWs()
+            checkout scm
+            commit_hash = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+            build_tag = sh(script: "echo " + params.github_release_tag.split('/')[-1] + "_" + commit_hash + "_" + env.BUILD_NUMBER, returnStdout: true).trim()
+            echo "build_tag: " + build_tag
 
-        stage('docker-pre-build') {
-            sh '''
-	    docker build -f ./Dockerfile.build -t $docker_pre_build .
-	    docker run --name $docker_pre_build $docker_pre_build:latest && docker cp $docker_pre_build:/opt/target/cb-comment-service-0.0.1-SNAPSHOT.jar .
-	    sleep 2
-	    docker rm -f $docker_pre_build
-	    docker rmi -f $docker_pre_build
-            '''
-        }
-        stage('Build') {
+            if (params.enable_code_analysis) {
+                stage('Code analysis') {
+                    build job: "Build/CodeReview/${JOB_BASE_NAME}", wait: true
+                }
+            }
+
+            stage('docker-pre-build') {
+                sh '''
+                    docker build -f ./Dockerfile.build -t $docker_pre_build .
+                    docker run --name $docker_pre_build $docker_pre_build:latest && docker cp $docker_pre_build:/opt/target/cb-comment-service-0.0.1-SNAPSHOT.jar .
+                    sleep 2
+                    docker rm -f $docker_pre_build
+                    docker rmi -f $docker_pre_build
+                '''
+            }
+
+            stage('Build') {
                 env.NODE_ENV = "build"
                 print "Environment will be : ${env.NODE_ENV}"
                 sh('chmod 777 build.sh')
                 sh("bash -x build.sh ${build_tag} ${env.NODE_NAME} ${docker_server}")
             }
-                        stage('ArchiveArtifacts') {
-                    archiveArtifacts "metadata.json"
-                    currentBuild.description = "${build_tag}"
-                }
 
-      }
-        
-	}
+            // 🧩 New Stage: Docker Vulnerability Scan
+            if (params.enable_docker_scan) {
+                stage('Docker Scan') {
+                    script {
+                        def imageFullName = "${hub_org}/${JOB_BASE_NAME}:${build_tag}"
+                        echo "🔍 Starting Trivy scan for image: ${imageFullName}"
+
+                        sh '''
+                            mkdir -p trivy-reports
+
+                            # Full Trivy scan in JSON format
+                            trivy image --quiet --format json --output trivy-reports/trivy-report.json ${hub_org}/${JOB_BASE_NAME}:${build_tag}
+
+                            # Extract by severity
+                            jq '.Results[].Vulnerabilities[] | select(.Severity=="CRITICAL")' trivy-reports/trivy-report.json > trivy-reports/critical.json || true
+                            jq '.Results[].Vulnerabilities[] | select(.Severity=="HIGH")' trivy-reports/trivy-report.json > trivy-reports/high.json || true
+                            jq '.Results[].Vulnerabilities[] | select(.Severity=="MEDIUM")' trivy-reports/trivy-report.json > trivy-reports/medium.json || true
+
+                            echo "================== TRIVY VULNERABILITY SUMMARY =================="
+                            jq -r '.Results[].Vulnerabilities[].Severity' trivy-reports/trivy-report.json | sort | uniq -c | awk '{print $2": "$1}'
+                            echo "================================================================="
+                        '''
+                    }
+                    // Archive the scan reports
+                    archiveArtifacts artifacts: 'trivy-reports/*.json', fingerprint: true
+                }
+            }
+
+            stage('ArchiveArtifacts') {
+                archiveArtifacts "metadata.json"
+                currentBuild.description = "${build_tag}"
+            }
+        }
+    }
     catch (err) {
         currentBuild.result = "FAILURE"
         throw err
     }
     finally {
-      //  email_notify()
+        // email_notify()
     }
 }
