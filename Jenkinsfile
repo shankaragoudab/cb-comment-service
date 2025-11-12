@@ -29,7 +29,7 @@ node() {
                 }
             }
 
-if (params.enable_dependency_scan) {
+if (params.enable_owasp_scan) {
     stage('Dependency Check (Pre-Build)') {
         script {
             // Dynamically use Jenkins job name for project and report naming
