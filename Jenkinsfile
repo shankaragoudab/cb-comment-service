@@ -32,26 +32,29 @@ node() {
 if (params.enable_owasp_scan) {
     stage('Dependency Check (Pre-Build)') {
         script {
-            // Dynamically use Jenkins job name for project and report naming
             def projectName = "${env.JOB_BASE_NAME}"
             def reportDir = "/var/lib/jenkins/owasp-report"
             def reportFile = "${reportDir}/${projectName}-owasp-report.html"
+            def workspaceReportDir = "${env.WORKSPACE}/owasp-report"
+            def workspaceReportFile = "${workspaceReportDir}/${projectName}-owasp-report.html"
 
             echo "🔍 Starting OWASP Dependency-Check for project: ${projectName}"
-            echo "📁 Report will be saved to: ${reportFile}"
+            echo "📁 Shared report path: ${reportFile}"
+            echo "📁 Workspace report path: ${workspaceReportFile}"
 
-            // Use Jenkins global Java 17 environment variable
             withEnv(["JAVA_HOME=${JAVA17_HOME}", "PATH=${JAVA17_HOME}/bin:${env.PATH}"]) {
                 sh """
                     set -e
-
                     echo "✅ Java version in use:"
                     java -version
 
-                    echo "🧭 Preparing output directory..."
+                    echo "🧭 Ensure shared report directory exists and is writable:"
                     mkdir -p ${reportDir}
+                    ls -ld ${reportDir} || true
 
-                    echo "🚀 Running OWASP Dependency-Check..."
+                    echo "🚀 Running OWASP Dependency-Check (writing to ${reportDir})..."
+                    # run from workspace so --scan . is correct
+                    cd "${env.WORKSPACE}"
                     time /var/lib/jenkins/dependency-check/bin/dependency-check.sh \
                         --project "${projectName}" \
                         --scan . \
@@ -59,20 +62,36 @@ if (params.enable_owasp_scan) {
                         --format "HTML" \
                         --disableNodeAudit --disableRetireJS --disableAssembly
 
-                    echo "📄 Renaming report to ${projectName}-owasp-report.html..."
-                    mv ${reportDir}/dependency-check-report.html ${reportFile} || true
+                    echo "📄 Attempt to move/rename generated report to job-specific name (if default created):"
+                    # Default name dependency-check-report.html may be created in reportDir
+                    if [ -f "${reportDir}/dependency-check-report.html" ]; then
+                        mv -f "${reportDir}/dependency-check-report.html" "${reportFile}"
+                    fi
 
-                    echo "================== DEPENDENCY-CHECK SUMMARY =================="
-                    grep -E "Vulnerabilities Found|Critical|High|Medium|Low" ${reportFile} || true
-                    echo "================================================================"
+                    echo "🔎 Verify report file exists and show details:"
+                    if [ -f "${reportFile}" ]; then
+                        ls -l "${reportFile}"
+                    else
+                        echo "!!! Report file NOT found at ${reportFile} !!!"
+                        echo "Listing ${reportDir} contents for debugging:"
+                        ls -la "${reportDir}" || true
+                        # Fail here so pipeline shows clear error (optional). Comment next line if you prefer to continue.
+                        exit 1
+                    fi
+
+                    echo "📋 Copying report into workspace for archiving..."
+                    mkdir -p "${workspaceReportDir}"
+                    cp -f "${reportFile}" "${workspaceReportFile}"
+                    ls -l "${workspaceReportFile}"
                 """
             }
 
-            // 🗂️ Archive only this job's specific HTML report
-            archiveArtifacts artifacts: "${reportFile}", fingerprint: true
+            // Archive only this job's specific HTML report (workspace-relative)
+            archiveArtifacts artifacts: "owasp-report/${projectName}-owasp-report.html", fingerprint: true
         }
     }
 }
+
             
             stage('docker-pre-build') {
                 sh '''
