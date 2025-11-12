@@ -29,6 +29,51 @@ node() {
                 }
             }
 
+if (params.enable_dependency_scan) {
+    stage('Dependency Check (Pre-Build)') {
+        script {
+            // Dynamically use Jenkins job name for project and report naming
+            def projectName = "${env.JOB_BASE_NAME}"
+            def reportDir = "/var/lib/jenkins/owasp-report"
+            def reportFile = "${reportDir}/${projectName}-owasp-report.html"
+
+            echo "🔍 Starting OWASP Dependency-Check for project: ${projectName}"
+            echo "📁 Report will be saved to: ${reportFile}"
+
+            // Use Jenkins global Java 17 environment variable
+            withEnv(["JAVA_HOME=${JAVA17_HOME}", "PATH=${JAVA17_HOME}/bin:${env.PATH}"]) {
+                sh """
+                    set -e
+
+                    echo "✅ Java version in use:"
+                    java -version
+
+                    echo "🧭 Preparing output directory..."
+                    mkdir -p ${reportDir}
+
+                    echo "🚀 Running OWASP Dependency-Check..."
+                    time /var/lib/jenkins/dependency-check/bin/dependency-check.sh \
+                        --project "${projectName}" \
+                        --scan . \
+                        --out ${reportDir} \
+                        --format "HTML" \
+                        --disableNodeAudit --disableRetireJS --disableAssembly
+
+                    echo "📄 Renaming report to ${projectName}-owasp-report.html..."
+                    mv ${reportDir}/dependency-check-report.html ${reportFile} || true
+
+                    echo "================== DEPENDENCY-CHECK SUMMARY =================="
+                    grep -E "Vulnerabilities Found|Critical|High|Medium|Low" ${reportFile} || true
+                    echo "================================================================"
+                """
+            }
+
+            // 🗂️ Archive only this job's specific HTML report
+            archiveArtifacts artifacts: "${reportFile}", fingerprint: true
+        }
+    }
+}
+            
             stage('docker-pre-build') {
                 sh '''
                     docker build -f ./Dockerfile.build -t $docker_pre_build .
