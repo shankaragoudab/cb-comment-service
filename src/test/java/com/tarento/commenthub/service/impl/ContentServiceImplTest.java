@@ -246,16 +246,22 @@ class ContentServiceImplTest {
     }
 
     @Test
-    void fetchResult_HttpClientErrorException_ReturnsErrorResponse() {
+    void fetchResult_HttpClientErrorException_ReturnsErrorResponse() throws Exception {
         String uri = "http://test-uri.com";
         String errorResponse = "{\"error\":\"Not Found\"}";
         HttpClientErrorException exception = new HttpClientErrorException(HttpStatus.NOT_FOUND, "Not Found", errorResponse.getBytes(), StandardCharsets.UTF_8);
         when(restTemplate.getForObject(uri, Map.class)).thenThrow(exception);
+
+        // Mock the mapper to parse the error response
+        Map<String, Object> expectedErrorMap = new HashMap<>();
+        expectedErrorMap.put("error", "Not Found");
+        when(mapper.readValue(anyString(), any(TypeReference.class))).thenReturn(expectedErrorMap);
+
         Object actualResponse = contentService.fetchResult(uri);
         assertNotNull(actualResponse);
         assertTrue(actualResponse instanceof Map);
         Map<String, Object> responseMap = (Map<String, Object>) actualResponse;
-        assertEquals("Not Found", responseMap.get("error")); // ✅ Fix here
+        assertEquals("Not Found", responseMap.get("error"));
     }
 
     @Test

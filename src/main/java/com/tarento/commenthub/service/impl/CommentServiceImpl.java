@@ -40,7 +40,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import com.tarento.commenthub.utility.notificationutill.HelperMethodService;
-import com.tarento.commenthub.utility.notificationutill.NotificationTriggerService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
@@ -102,9 +101,6 @@ public class CommentServiceImpl implements CommentService {
 
   @Autowired
   private ContentService contentService;
-
-  @Autowired
-  private NotificationTriggerService notificationTriggerService;
 
   @Autowired
   private HelperMethodService helperMethodService;
@@ -514,7 +510,7 @@ public class CommentServiceImpl implements CommentService {
 
         Map<String, Object> resultMap = tryFetchFromRedis(commentTreeId, offset, limit);
         if (searchCriteria.isOverrideCache() || MapUtils.isEmpty(resultMap)) {
-            resultMap = fetchCommentFromPrimary(offset, limit, childNodeList, commentTree.get(), searchCriteria.isEnrichedUser(), version);
+            resultMap = fetchCommentFromPrimary(offset, limit, childNodeList, commentTree.get(), version);
             storeInRedis(commentTreeId, offset, limit, resultMap);
         }
 
@@ -568,9 +564,7 @@ public class CommentServiceImpl implements CommentService {
     }
 
     private Map<String, Object> fetchCommentFromPrimary(int offset, int limit,
-                                                        List<String> childNodeList, CommentTree commentTree, boolean isUserEnriched, String version) {
-
-        Map<String, Object> resultMap = new HashMap<>();
+                                                        List<String> childNodeList, CommentTree commentTree, String version) {
         Pageable pageable = PageRequest.of(offset, limit, Sort.by(Sort.Direction.DESC, Constants.CREATED_DATE));
         List<Comment> comments = commentRepository.findByCommentIdIn(childNodeList, pageable).getContent();
 
@@ -593,8 +587,7 @@ public class CommentServiceImpl implements CommentService {
         );
         Optional.ofNullable(comments)
                 .ifPresent(commentsList -> commentsResoponseDTO.setCommentCount(childNodeList.size()));
-        resultMap = objectMapper.convertValue(commentsResoponseDTO, Map.class);
-        return resultMap;
+        return objectMapper.convertValue(commentsResoponseDTO, Map.class);
     }
 
     private static class UserExtractionResult {
@@ -660,8 +653,6 @@ public class CommentServiceImpl implements CommentService {
             return returnErrorMsg("Bad rqst", HttpStatus.BAD_REQUEST, response);
         }
 
-        int offset = defaultOffset;
-        int limit = defaultLimit;
         Sort sort = Sort.by(Sort.Direction.DESC, Constants.CREATED_DATE);
         List<String> statuses = Arrays.asList(Status.ACTIVE.name().toLowerCase(), Status.SUSPENDED.name().toLowerCase());
         List<Comment> comments = commentRepository.findByCommentIdInAndStatusIn(commentIds, statuses, sort);
@@ -912,7 +903,6 @@ public class CommentServiceImpl implements CommentService {
   private Map<String, Object> fetchCommentFromPrimaryV3(int offset, int limit,
       List<String> childNodeList, String commentTreeId) {
     log.info("CommentServiceImpl::getComments::fetch comments from redis");
-    Map<String, Object> resultMap = new HashMap<>();
     Pageable pageable = PageRequest.of(offset, limit,
         Sort.by(Sort.Direction.DESC, Constants.CREATED_DATE));
     List<Comment> comments = commentRepository.findByCommentIdIn(childNodeList, pageable)
@@ -970,12 +960,11 @@ public class CommentServiceImpl implements CommentService {
         comments, userList, taggedUsers, commentTreeId);
     Optional.ofNullable(comments)
         .ifPresent(commentsList -> commentsResoponseDTO.setCommentCount(childNodeList.size()));
-    resultMap = objectMapper.convertValue(commentsResoponseDTO, Map.class);
-    return resultMap;
+    return objectMapper.convertValue(commentsResoponseDTO, Map.class);
   }
 
   private String validateReportCommentPayload(Map<String, Object> request) {
-    StringBuffer str = new StringBuffer();
+    StringBuilder str = new StringBuilder();
     List<String> errList = new ArrayList<>();
 
     if (request.containsKey(Constants.COMMENT_ID) &&
@@ -1016,7 +1005,7 @@ public class CommentServiceImpl implements CommentService {
   }
 
   private String validateSearchPayload(SearchCriteria searchCriteria) {
-    StringBuffer str = new StringBuffer();
+    StringBuilder str = new StringBuilder();
     List<String> errList = new ArrayList<>();
 
     if (StringUtils.isBlank(searchCriteria.getCommentTreeId())) {
@@ -1032,7 +1021,7 @@ public class CommentServiceImpl implements CommentService {
   }
 
   private String validatePayloadForCommAndUser(String commentId, String userId) {
-    StringBuffer str = new StringBuffer();
+    StringBuilder str = new StringBuilder();
     List<String> errList = new ArrayList<>();
 
     if (StringUtils.isBlank(commentId)) {
@@ -1048,7 +1037,7 @@ public class CommentServiceImpl implements CommentService {
   }
 
   private String validateLikeCommentPayload(Map<String, Object> likePayload) {
-    StringBuffer str = new StringBuffer();
+    StringBuilder str = new StringBuilder();
     List<String> errList = new ArrayList<>();
 
     if (StringUtils.isBlank((String) likePayload.get(Constants.COMMENT_ID))) {
@@ -1092,55 +1081,6 @@ public class CommentServiceImpl implements CommentService {
 
     log.info("commentTreeId: {}", jwtToken);
     return jwtToken;
-  }
-
-  private List<Map<String, Object>> fetchUsersByCommentData (List<Comment> comments) {
-    List<Map<String, Object>> userList = new ArrayList<>();
-    List<String> userIds = comments.stream()
-        .map(comment -> comment.getCommentData().get(Constants.COMMENT_SOURCE)
-            .get(Constants.USER_ID).asText())
-        .collect(Collectors.toList());
-    Map<String, Object> propertyMap = new HashMap<>();
-    propertyMap.put(Constants.ID, userIds);
-    List<Map<String, Object>> userInfoList = cassandraOperation.getRecordsByProperties(
-        Constants.KEYSPACE_SUNBIRD, Constants.TABLE_USER, propertyMap,
-        Arrays.asList(Constants.PROFILE_DETAILS, Constants.FIRST_NAME, Constants.ID), null);
-
-    userList = userInfoList.stream()
-        .map(userInfo -> {
-          Map<String, Object> userMap = new HashMap<>();
-
-          // Extract user ID and user name
-          String userId = (String) userInfo.get(Constants.ID);
-          String userName = (String) userInfo.get(Constants.FIRST_NAME);
-
-          userMap.put(Constants.USER_ID, userId);
-          userMap.put(Constants.USER_NAME, userName);
-
-          // Process profile details if present
-          String profileDetails = (String) userInfo.get(Constants.PROFILE_DETAILS);
-          if (StringUtils.isNotBlank(profileDetails)) {
-            try {
-              // Convert JSON profile details to a Map
-              Map<String, Object> profileDetailsMap = objectMapper.readValue(profileDetails,
-                  new TypeReference<HashMap<String, Object>>() {});
-
-              // Check for profile image and add to userMap if available
-              if (MapUtils.isNotEmpty(profileDetailsMap) && profileDetailsMap.containsKey(Constants.PROFILE_IMG)) {
-                String profileImageUrl = (String) profileDetailsMap.get(Constants.PROFILE_IMG);
-                if (StringUtils.isNotEmpty(profileImageUrl)) {
-                  userMap.put(Constants.PROFILE_IMG, profileImageUrl);
-                }
-              }
-            } catch (JsonProcessingException e) {
-              throw new CommentException(e);
-            }
-          }
-
-          return userMap;
-        })
-        .collect(Collectors.toList());
-    return userList;
   }
 
   public String generateRedisJwtTokenKey(String commentTreeId, Integer offset, Integer limit) {

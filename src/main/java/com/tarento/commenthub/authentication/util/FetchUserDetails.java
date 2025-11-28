@@ -15,7 +15,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.igot.common.cassandra.CassandraOperation;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import redis.clients.jedis.JedisPool;
 
@@ -23,13 +22,14 @@ import redis.clients.jedis.JedisPool;
 @Component
 public class FetchUserDetails {
 
-    @Autowired
-    private JedisPool jedisPool;
+  private final JedisPool jedisPool;
+  private final CassandraOperation cassandraOperation;
+  private final ObjectMapper objectMapper = new ObjectMapper();
 
-  @Autowired
-  private CassandraOperation cassandraOperation;
-
-  ObjectMapper objectMapper = new ObjectMapper();
+  public FetchUserDetails(CassandraOperation cassandraOperation, JedisPool jedisPool) {
+    this.cassandraOperation = cassandraOperation;
+    this.jedisPool = jedisPool;
+  }
 
     public List<Object> fetchDataForKeys(List<String> keys) {
         log.info("FetchUserDetails::fetchDataForKeys::inside method");

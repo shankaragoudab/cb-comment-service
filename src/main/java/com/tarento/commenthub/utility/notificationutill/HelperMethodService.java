@@ -17,7 +17,6 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.igot.common.cassandra.CassandraOperation;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -28,16 +27,22 @@ import static com.tarento.commenthub.constant.Constants.*;
 @Service
 @Slf4j
 public class HelperMethodService {
-    @Autowired
+
     private ObjectMapper objectMapper;
-    @Autowired
     private CassandraOperation cassandraOperation;
-    @Autowired
     private RedisCacheMngr cacheService;
-    @Autowired
     private ContentService contentService;
-    @Autowired
     private NotificationTriggerService notificationTriggerService;
+
+    public HelperMethodService(ObjectMapper objectMapper, CassandraOperation cassandraOperation,
+                               RedisCacheMngr cacheService, ContentService contentService,
+                               NotificationTriggerService notificationTriggerService) {
+        this.objectMapper = objectMapper;
+        this.cassandraOperation = cassandraOperation;
+        this.cacheService = cacheService;
+        this.contentService = contentService;
+        this.notificationTriggerService = notificationTriggerService;
+    }
 
     public String fetchDataForKeys(String keys) {
         return cacheService.getContentFromCache(keys);

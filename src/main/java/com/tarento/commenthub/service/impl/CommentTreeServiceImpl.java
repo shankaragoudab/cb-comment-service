@@ -21,7 +21,6 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
@@ -30,21 +29,22 @@ import org.springframework.stereotype.Service;
 @Service
 @Log4j2
 public class CommentTreeServiceImpl implements CommentTreeService {
+  private ObjectMapper objectMapper;
+  private CommentTreeRepository commentTreeRepository;
+  private RedisTemplate redisTemplate;
 
   @Value("${jwt.secret.key}")
   private String jwtSecretKey;
 
-  @Autowired
-  private ObjectMapper objectMapper;
-
-  @Autowired
-  private CommentTreeRepository commentTreeRepository;
-
-  @Autowired
-  private RedisTemplate redisTemplate;
-
   @Value("${redis.ttl.comment.tree}")
   private long redisTtl;
+
+  public CommentTreeServiceImpl(CommentTreeRepository commentTreeRepository, ObjectMapper objectMapper,
+      RedisTemplate redisTemplate) {
+    this.commentTreeRepository = commentTreeRepository;
+    this.objectMapper = objectMapper;
+    this.redisTemplate = redisTemplate;
+  }
 
   public CommentTree createCommentTree(JsonNode payload) {
     log.info("CommentTreeService::createCommentTree:Creating comment tree with payload: {}", payload);
@@ -248,7 +248,6 @@ public class CommentTreeServiceImpl implements CommentTreeService {
             for (int j = 0; j < children.size(); j++) {
               if (commentId.equalsIgnoreCase(children.get(j).get(Constants.COMMENT_ID).asText())) {
                 children.remove(j);
-                commentIdFound = true;
 
                 // Remove empty children array
                 if (children.isEmpty() && commentNode instanceof ObjectNode) {
@@ -265,7 +264,6 @@ public class CommentTreeServiceImpl implements CommentTreeService {
         if ((parentId == null || "null".equalsIgnoreCase(parentId) || parentId.isEmpty()) &&
             commentId.equalsIgnoreCase(currentCommentId)) {
           comments.remove(i);
-          commentIdFound = true;
           break;
         }
       }

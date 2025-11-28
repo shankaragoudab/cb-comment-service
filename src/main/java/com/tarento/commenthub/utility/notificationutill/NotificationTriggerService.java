@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.tarento.commenthub.utility.CbServerProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.MapUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
@@ -23,15 +22,17 @@ import static com.tarento.commenthub.constant.Constants.*;
 @Slf4j
 public class NotificationTriggerService {
 
-    @Autowired
     private RestTemplate restTemplate;
-
-    @Autowired
     private CbServerProperties serverConfig;
-
-
-    @Autowired
     private ObjectMapper objectMapper;
+
+    public NotificationTriggerService(RestTemplate restTemplate,
+                                      CbServerProperties serverConfig,
+                                      ObjectMapper objectMapper) {
+        this.restTemplate = restTemplate;
+        this.serverConfig = serverConfig;
+        this.objectMapper = objectMapper;
+    }
 
     public void sendNotification(
             String subCategory,

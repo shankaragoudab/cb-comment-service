@@ -3,7 +3,6 @@ package com.tarento.commenthub.controller;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.tarento.commenthub.constant.Constants;
 import com.tarento.commenthub.dto.CommentTreeIdentifierDTO;
-import com.tarento.commenthub.dto.MultipleWorkflowsCommentResponseDTO;
 import com.tarento.commenthub.dto.CommentsResoponseDTO;
 import com.tarento.commenthub.dto.ResponseDTO;
 import com.tarento.commenthub.dto.SearchCriteria;
@@ -16,7 +15,6 @@ import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 
 import org.igot.common.ApiResponse;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -35,11 +33,14 @@ import org.springframework.web.bind.annotation.RestController;
 @Slf4j
 public class CommentController {
 
-  @Autowired
-  CommentTreeService commentTreeService;
-
-  @Autowired
+  private CommentTreeService commentTreeService;
   private CommentService commentService;
+
+  public CommentController(CommentService commentService,
+      CommentTreeService commentTreeService) {
+    this.commentService = commentService;
+    this.commentTreeService = commentTreeService;
+  }
 
   @PostMapping("/v1/addFirst")
   public ResponseDTO addFirstComment(@RequestBody JsonNode payload) {
