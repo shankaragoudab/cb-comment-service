@@ -122,6 +122,8 @@ class CommentServiceImplTest {
         ReflectionTestUtils.setField(commentService, "defaultOffset", 0);
         ReflectionTestUtils.setField(commentService, "jwtSecretKey", "dummysecret");
         ReflectionTestUtils.setField(commentService, "redisTtl", 1000L);
+        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        lenient().when(redisTemplateEx.opsForValue()).thenReturn(valueOperations);
     }
 
 
@@ -173,8 +175,6 @@ class CommentServiceImplTest {
         when(commentRepository.findById(localCommentId)).thenReturn(Optional.of(existingComment));
         when(commentRepository.save(any(Comment.class))).thenAnswer(i -> i.getArguments()[0]);
         when(commentTreeService.getCommentTreeById(commentTreeId)).thenReturn(mockCommentTree);
-        lenient().when(redisTemplateEx.opsForValue()).thenReturn(valueOperations);
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         lenient().when(helperMethodService.processMentionedUsers(any(), any())).thenReturn(new ArrayList<>());
         ResponseDTO response = commentService.updateExistingComment(testPayload);
         assertNotNull(response);
@@ -210,8 +210,6 @@ class CommentServiceImplTest {
         localMockCommentTree.setLastUpdatedDate(new Timestamp(System.currentTimeMillis()));
         when(commentRepository.save(any(Comment.class))).thenReturn(mockComment);
         when(commentTreeService.updateCommentTree(any(JsonNode.class))).thenReturn(localMockCommentTree);
-        lenient().when(redisTemplateEx.opsForValue()).thenReturn(valueOperations);
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         lenient().when(helperMethodService.processMentionedUsers(any(), any())).thenReturn(new ArrayList<>());
         ResponseDTO response = commentService.addNewCommentToTree(testPayload);
         assertNotNull(response);
@@ -258,8 +256,6 @@ class CommentServiceImplTest {
         localMockCommentTree.setStatus("ACTIVE");
         localMockCommentTree.setCreatedDate(new Timestamp(System.currentTimeMillis()));
         localMockCommentTree.setLastUpdatedDate(new Timestamp(System.currentTimeMillis()));
-        lenient().when(redisTemplateEx.opsForValue()).thenReturn(valueOperations);
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(commentRepository.save(any(Comment.class))).thenReturn(mockComment);
         when(commentTreeService.createCommentTree(any(JsonNode.class))).thenReturn(localMockCommentTree);
         lenient().when(helperMethodService.processMentionedUsers(any(), any())).thenReturn(new ArrayList<>());
@@ -411,8 +407,6 @@ class CommentServiceImplTest {
         Comment comment = createMockComment(VALID_USER_ID, Status.ACTIVE.name());
 
         // Mock Redis operations
-        lenient().when(redisTemplateEx.opsForValue()).thenReturn(valueOperations);
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.getOperations()).thenReturn(redisTemplate);
 
         // Mock other dependencies
@@ -671,7 +665,6 @@ class CommentServiceImplTest {
         tree.setCommentTreeData(commentTreeData);
 
         when(commentTreeRepository.findById(treeId)).thenReturn(Optional.of(tree));
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         String cachedJson = "{\"cachedKey\":\"cachedValue\"}";
         when(valueOperations.get(anyString())).thenReturn(cachedJson);
 
@@ -703,7 +696,6 @@ class CommentServiceImplTest {
 
         lenient().when(contentService.readContentFromCache(eq(courseId), isNull())).thenReturn(courseDetails);
         when(commentTreeRepository.findById(treeId)).thenReturn(Optional.of(tree));
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get(anyString())).thenReturn(null);
         when(commentRepository.findByCommentIdIn(anyList(), any(Pageable.class))).thenReturn(new PageImpl<>(commentList));
         ApiResponse response = commentService.paginatedComment(criteria, "v1");
@@ -758,7 +750,6 @@ class CommentServiceImplTest {
 
 
         when(commentTreeRepository.findById(treeId)).thenReturn(Optional.of(tree));
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get(anyString())).thenReturn(null);
         when(fetchUser.fetchDataForKeys(anyList())).thenReturn(List.of(Map.of("id", "user1")));
 
@@ -805,7 +796,6 @@ class CommentServiceImplTest {
         // ✅ Allow null for first argument to prevent strict stubbing exception
         when(commentRepository.findByCommentIdIn(any(), any(Pageable.class))).thenReturn(mockCommentPage);
         when(commentTreeRepository.findById(treeId)).thenReturn(Optional.of(tree));
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.get(anyString())).thenReturn(null);
         when(fetchUser.fetchDataForKeys(anyList())).thenReturn(List.of(Map.of("id", "user1")));
 
@@ -1180,7 +1170,6 @@ class CommentServiceImplTest {
         Map<String, Object> commentTreeMap = new HashMap<>();
         commentTreeMap.put("firstLevelNodes", Arrays.asList("c1", "c2"));
 
-        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         lenient().when(valueOperations.get(anyString())).thenReturn(null);
 
         ApiResponse response = commentService.paginatedCommentV3(criteria);
@@ -1217,7 +1206,6 @@ class CommentServiceImplTest {
         when(commentTreeRepository.findById(commentTreeId)).thenReturn(Optional.of(tree));
 
         // Redis mocks
-        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         Map<String, Object> commentResultMap = new HashMap<>();
         commentResultMap.put(Constants.FIRST_LEVEL_NODES, List.of("c1", "c2", "c3"));
 
@@ -1238,7 +1226,6 @@ class CommentServiceImplTest {
         searchCriteria.setEntityType("TEST");
         searchCriteria.setEntityId("123");
         searchCriteria.setWorkflow("workflow1");
-        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         lenient().when(valueOperations.get(contains(Constants.COMMENT_TREE_REDIS_KEY))).thenReturn(null);
 
 

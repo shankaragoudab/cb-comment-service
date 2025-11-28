@@ -15,6 +15,7 @@ import com.fasterxml.uuid.Generators;
 import com.networknt.schema.JsonSchema;
 import com.networknt.schema.JsonSchemaFactory;
 import com.networknt.schema.ValidationMessage;
+import com.networknt.schema.SpecVersion.VersionFlag;
 import com.tarento.commenthub.authentication.util.FetchUserDetails;
 import com.tarento.commenthub.constant.Constants;
 import com.tarento.commenthub.dto.CommentTreeIdentifierDTO;
@@ -37,9 +38,9 @@ import java.io.InputStream;
 import java.sql.Timestamp;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 import com.tarento.commenthub.utility.notificationutill.HelperMethodService;
+
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
@@ -60,23 +61,20 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class CommentServiceImpl implements CommentService {
 
-  @Autowired
   private CommentRepository commentRepository;
-
-  @Autowired
   private CommentTreeService commentTreeService;
-
-  @Autowired
   private ObjectMapper objectMapper;
-
-  @Autowired
   private RedisTemplate<String, Object> redisTemplate;
+  private CassandraOperation cassandraOperation;
+  private CommentTreeRepository commentTreeRepository;
+  private AccessTokenValidator accessTokenValidator;
+  private FetchUserDetails fetchUser;
+  private UserCommentLikeRepository userCommentLikeRepository;
+  private ContentService contentService;
+  private HelperMethodService helperMethodService;
 
   @Value("${redis.ttl}")
   private long redisTtl;
-
-  @Autowired
-  private CassandraOperation cassandraOperation;
 
   @Value("${jwt.secret.key}")
   private String jwtSecretKey;
@@ -87,23 +85,29 @@ public class CommentServiceImpl implements CommentService {
   @Value("${default.offset}")
   private int defaultOffset;
 
-  @Autowired
-  private CommentTreeRepository commentTreeRepository;
-
-  @Autowired
-  private AccessTokenValidator accessTokenValidator;
-
-  @Autowired
-  private FetchUserDetails fetchUser;
-
-  @Autowired
-  private UserCommentLikeRepository userCommentLikeRepository;
-
-  @Autowired
-  private ContentService contentService;
-
-  @Autowired
-  private HelperMethodService helperMethodService;
+  public CommentServiceImpl(CommentRepository commentRepository,
+                            CommentTreeService commentTreeService,
+                            ObjectMapper objectMapper,
+                            RedisTemplate<String, Object> redisTemplate,
+                            CassandraOperation cassandraOperation,
+                            CommentTreeRepository commentTreeRepository,
+                            AccessTokenValidator accessTokenValidator,
+                            FetchUserDetails fetchUser,
+                            UserCommentLikeRepository userCommentLikeRepository,
+                            ContentService contentService,
+                            HelperMethodService helperMethodService) {
+    this.commentRepository = commentRepository;
+    this.commentTreeService = commentTreeService;
+    this.objectMapper = objectMapper;
+    this.redisTemplate = redisTemplate;
+    this.cassandraOperation = cassandraOperation;
+    this.commentTreeRepository = commentTreeRepository;
+    this.accessTokenValidator = accessTokenValidator;
+    this.fetchUser = fetchUser;
+    this.userCommentLikeRepository = userCommentLikeRepository;
+    this.contentService = contentService;
+    this.helperMethodService = helperMethodService;
+  } 
 
   @Override
   public ResponseDTO addFirstCommentToCreateTree(JsonNode payload) {
@@ -127,8 +131,7 @@ public class CommentServiceImpl implements CommentService {
     Comment comment = getPersistedComment(payload);
     ((ObjectNode) payload).put(Constants.COMMENT_ID, comment.getCommentId());
     CommentTree commentTree = commentTreeService.updateCommentTree(payload);
-    ResponseDTO responseDTO = new ResponseDTO(commentTree, comment);
-    return responseDTO;
+    return new ResponseDTO(commentTree, comment);
   }
 
   @Override
@@ -359,7 +362,7 @@ public class CommentServiceImpl implements CommentService {
 
   public void validatePayload(String fileName, JsonNode payload) {
     try {
-      JsonSchemaFactory schemaFactory = JsonSchemaFactory.getInstance();
+      JsonSchemaFactory schemaFactory = JsonSchemaFactory.getInstance(VersionFlag.V7);
       InputStream schemaStream = schemaFactory.getClass().getResourceAsStream(fileName);
       JsonSchema schema = schemaFactory.getSchema(schemaStream);
 
@@ -457,7 +460,7 @@ public class CommentServiceImpl implements CommentService {
       commentRepository.save(commentToBeUpdated);
       return response;
     } catch (Exception e) {
-      log.error("error occured while liking a comment::" + String.valueOf(e));
+      log.error("error occured while liking a comment::" + e.getMessage(), e);
       throw new CommentException(e);
     }
   }
@@ -641,8 +644,7 @@ public class CommentServiceImpl implements CommentService {
 
   private Map<String, Object> fetchCourseDetails(String courseId) {
     log.info("fetching course details from redis");
-    Map<String, Object> courseDetails = contentService.readContentFromCache(courseId, null);
-    return courseDetails;
+    return contentService.readContentFromCache(courseId, null);
   }
 
     @Override

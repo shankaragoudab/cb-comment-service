@@ -60,7 +60,7 @@ public class ContentServiceImpl implements ContentService {
         responseData = readContent(contentId, fields);
       } else {
         try {
-          responseData = new HashMap<String, Object>();
+          responseData = new HashMap<>();
           Map<String, Object> contentData = mapper.readValue(contentString,
               new TypeReference<Map<String, Object>>() {
               });
