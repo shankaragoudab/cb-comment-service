@@ -31,7 +31,7 @@ import org.springframework.stereotype.Service;
 public class CommentTreeServiceImpl implements CommentTreeService {
   private ObjectMapper objectMapper;
   private CommentTreeRepository commentTreeRepository;
-  private RedisTemplate redisTemplate;
+  private RedisTemplate<String, Object> redisTemplate;
 
   @Value("${jwt.secret.key}")
   private String jwtSecretKey;
@@ -40,7 +40,7 @@ public class CommentTreeServiceImpl implements CommentTreeService {
   private long redisTtl;
 
   public CommentTreeServiceImpl(CommentTreeRepository commentTreeRepository, ObjectMapper objectMapper,
-      RedisTemplate redisTemplate) {
+      RedisTemplate<String, Object> redisTemplate) {
     this.commentTreeRepository = commentTreeRepository;
     this.objectMapper = objectMapper;
     this.redisTemplate = redisTemplate;
@@ -83,7 +83,7 @@ public class CommentTreeServiceImpl implements CommentTreeService {
         storeResultMapInRedis(commentTreeId, resultMap);
         return commentTree;
     } catch (Exception e) {
-      e.printStackTrace();
+      log.error("Error while creating comment tree: {}", e.getMessage(), e);
       throw new CommentException(Constants.ERROR, e.getMessage(), HttpStatus.OK.value());
     }
   }
@@ -146,7 +146,7 @@ public class CommentTreeServiceImpl implements CommentTreeService {
         storeResultMapInRedis(Constants.COMMENT_TREE_REDIS_KEY + commentTreeId, resultMap);
         return persistedCommentTree;
       } catch (Exception e) {
-        e.printStackTrace();
+        log.error("Error while updating comment tree: {}", e.getMessage(), e);
         throw new CommentException(Constants.ERROR, e.getMessage(), HttpStatus.OK.value());
       }
     }

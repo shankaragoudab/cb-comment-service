@@ -103,7 +103,7 @@ public class ContentServiceImpl implements ContentService {
       log.info("ContentServiceImpl::readContent:read the content");
       return (Map<String, Object>) contentResult.get(Constants.CONTENT);
     }
-    return null;
+    return Collections.emptyMap();
   }
 
   public Object fetchResult(String uri) {
@@ -125,6 +125,7 @@ public class ContentServiceImpl implements ContentService {
             new TypeReference<HashMap<String, Object>>() {
             });
       } catch (Exception e1) {
+        log.debug("Error while parsing error response: {}", e1.getMessage(), e1);
       }
       log.error("Error received: " + e.getResponseBodyAsString(), e);
     } catch (Exception e) {
@@ -132,6 +133,7 @@ public class ContentServiceImpl implements ContentService {
       try {
         log.warn("Error Response: " + mapper.writeValueAsString(response));
       } catch (Exception e1) {
+        log.debug("Error while parsing error response: {}", e1.getMessage(), e1);
       }
     }
     return response;

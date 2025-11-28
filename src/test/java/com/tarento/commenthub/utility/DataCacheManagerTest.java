@@ -35,6 +35,6 @@ class DataCacheManagerTest {
         String key = "nonExistingKey";
         Map<String, Object> result = dataCacheManager.getContentFromCache(key);
 
-        assertNull(result);
+        assertTrue(result.isEmpty());
     }
 }

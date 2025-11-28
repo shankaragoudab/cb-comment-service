@@ -48,7 +48,7 @@ class CommentTreeServiceImplTest {
     private ValueOperations<String, Object> valueOperations;
 
     @Mock
-    private RedisTemplate redisTemplate;
+    private RedisTemplate<String, Object> redisTemplate;
 
 
     @BeforeEach

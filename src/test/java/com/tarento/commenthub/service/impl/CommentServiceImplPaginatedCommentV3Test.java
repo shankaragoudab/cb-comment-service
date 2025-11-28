@@ -40,7 +40,7 @@ class CommentServiceImplPaginatedCommentV3Test {
     private CommentTreeRepository commentTreeRepository;
 
     @Mock
-    private RedisTemplate redisTemplate;
+    private RedisTemplate<String, Object> redisTemplate;
 
     @Mock
     private ValueOperations valueOperations;

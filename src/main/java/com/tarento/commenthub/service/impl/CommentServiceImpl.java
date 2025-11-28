@@ -70,7 +70,7 @@ public class CommentServiceImpl implements CommentService {
   private ObjectMapper objectMapper;
 
   @Autowired
-  private RedisTemplate redisTemplate;
+  private RedisTemplate<String, Object> redisTemplate;
 
   @Value("${redis.ttl}")
   private long redisTtl;
