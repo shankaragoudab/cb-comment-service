@@ -9,7 +9,6 @@ import com.tarento.commenthub.entity.Comment;
 import com.tarento.commenthub.entity.CommentTree;
 import com.tarento.commenthub.service.CommentService;
 import com.tarento.commenthub.service.CommentTreeService;
-import com.tarento.commenthub.transactional.utils.ApiResponse;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -33,7 +32,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-import org.junit.jupiter.api.BeforeEach;;
+import org.igot.common.ApiResponse;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.junit.jupiter.api.Assertions.*;

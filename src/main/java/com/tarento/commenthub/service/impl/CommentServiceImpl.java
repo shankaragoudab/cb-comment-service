@@ -5,7 +5,6 @@ import static com.tarento.commenthub.utility.CommentsUtility.containsNull;
 
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
-import com.auth0.jwt.interfaces.DecodedJWT;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -16,7 +15,6 @@ import com.fasterxml.uuid.Generators;
 import com.networknt.schema.JsonSchema;
 import com.networknt.schema.JsonSchemaFactory;
 import com.networknt.schema.ValidationMessage;
-import com.tarento.commenthub.authentication.util.AccessTokenValidator;
 import com.tarento.commenthub.authentication.util.FetchUserDetails;
 import com.tarento.commenthub.constant.Constants;
 import com.tarento.commenthub.dto.CommentTreeIdentifierDTO;
@@ -34,15 +32,12 @@ import com.tarento.commenthub.repository.UserCommentLikeRepository;
 import com.tarento.commenthub.service.CommentService;
 import com.tarento.commenthub.service.CommentTreeService;
 import com.tarento.commenthub.service.ContentService;
-import com.tarento.commenthub.transactional.cassandrautils.CassandraOperation;
-import com.tarento.commenthub.transactional.utils.ApiResponse;
 import com.tarento.commenthub.utility.Status;
 import java.io.InputStream;
 import java.sql.Timestamp;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import com.tarento.commenthub.utility.notificationutill.HelperMethodService;
 import com.tarento.commenthub.utility.notificationutill.NotificationTriggerService;
@@ -50,6 +45,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.igot.common.ApiResponse;
+import org.igot.common.auth.AccessTokenValidator;
+import org.igot.common.cassandra.CassandraOperation;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
@@ -382,12 +380,6 @@ public class CommentServiceImpl implements CommentService {
     }
   }
 
-  private List<String> getKeys(List<String> childNodeList) {
-    return childNodeList.stream().map(id -> COMMENT_KEY + id)
-        .collect(Collectors.toList());
-  }
-
-
   //need for refactoring later
   @Override
   public ApiResponse likeComment(Map<String, Object> likePayload) {
@@ -489,7 +481,7 @@ public class CommentServiceImpl implements CommentService {
     Map<String, Object> propertyMap = new HashMap<>();
     propertyMap.put(Constants.COMMENT_ID, commentId);
     propertyMap.put(Constants.USERID, userId);
-    List<Map<String, Object>> records = cassandraOperation.getRecordsByPropertiesWithoutFiltering(
+    List<Map<String, Object>> records = cassandraOperation.getRecordsByProperties(
         Constants.KEYSPACE_SUNBIRD, "comment_likes", propertyMap,
         Collections.singletonList("flag"), null);
     if (!records.isEmpty()) {
@@ -1012,7 +1004,7 @@ public class CommentServiceImpl implements CommentService {
       }
     }
     if (!errList.isEmpty()) {
-      str.append("Failed Due To Missing Params - ").append(errList).append(".");
+      str.append(Constants.ERROR_MISSING_PARAM).append(errList).append(".");
     }
     return str.toString();
   }
@@ -1028,11 +1020,13 @@ public class CommentServiceImpl implements CommentService {
     List<String> errList = new ArrayList<>();
 
     if (StringUtils.isBlank(searchCriteria.getCommentTreeId())) {
-      if(searchCriteria.getEntityType().isEmpty() && searchCriteria.getEntityType().isEmpty() && searchCriteria.getWorkflow().isEmpty())
-      errList.add(Constants.COMMENT_TREE_ID);
+      if (searchCriteria.getEntityType().isEmpty() && searchCriteria.getEntityType().isEmpty()
+          && searchCriteria.getWorkflow().isEmpty()) {
+        errList.add(Constants.COMMENT_TREE_ID);
+      }
     }
     if (!errList.isEmpty()) {
-      str.append("Failed Due To Missing Params - ").append(errList).append(".");
+      str.append(Constants.ERROR_MISSING_PARAM).append(errList).append(".");
     }
     return str.toString();
   }
@@ -1048,7 +1042,7 @@ public class CommentServiceImpl implements CommentService {
       errList.add(Constants.USERID);
     }
     if (!errList.isEmpty()) {
-      str.append("Failed Due To Missing Params - ").append(errList).append(".");
+      str.append(Constants.ERROR_MISSING_PARAM).append(errList).append(".");
     }
     return str.toString();
   }
@@ -1074,7 +1068,7 @@ public class CommentServiceImpl implements CommentService {
       errList.add("flag must be either 'like' or 'dislike'");
     }
     if (!errList.isEmpty()) {
-      str.append("Failed Due To Missing Params - ").append(errList).append(".");
+      str.append(Constants.ERROR_MISSING_PARAM).append(errList).append(".");
     }
     return str.toString();
   }
@@ -1108,7 +1102,7 @@ public class CommentServiceImpl implements CommentService {
         .collect(Collectors.toList());
     Map<String, Object> propertyMap = new HashMap<>();
     propertyMap.put(Constants.ID, userIds);
-    List<Map<String, Object>> userInfoList = cassandraOperation.getRecordsByPropertiesWithoutFiltering(
+    List<Map<String, Object>> userInfoList = cassandraOperation.getRecordsByProperties(
         Constants.KEYSPACE_SUNBIRD, Constants.TABLE_USER, propertyMap,
         Arrays.asList(Constants.PROFILE_DETAILS, Constants.FIRST_NAME, Constants.ID), null);
 

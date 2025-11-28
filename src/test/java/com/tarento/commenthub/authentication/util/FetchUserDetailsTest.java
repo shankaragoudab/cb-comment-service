@@ -3,7 +3,8 @@ package com.tarento.commenthub.authentication.util;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tarento.commenthub.constant.Constants;
-import com.tarento.commenthub.transactional.cassandrautils.CassandraOperation;
+
+import org.igot.common.cassandra.CassandraOperation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.*;
@@ -87,7 +88,7 @@ class FetchUserDetailsTest {
         dbRecord.put(Constants.FIRST_NAME, "Alice");
         dbRecord.put(Constants.PROFILE_DETAILS, profileJson);
 
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(
+        when(cassandraOperation.getRecordsByProperties(
                 eq(Constants.KEYSPACE_SUNBIRD), eq(Constants.TABLE_USER), anyMap(), anyList(), isNull()))
                 .thenReturn(Collections.singletonList(dbRecord));
 
@@ -107,7 +108,7 @@ class FetchUserDetailsTest {
         dbRecord.put(Constants.FIRST_NAME, "Alice");
         dbRecord.put(Constants.PROFILE_DETAILS, "");
 
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(
+        when(cassandraOperation.getRecordsByProperties(
                 anyString(), anyString(), anyMap(), anyList(), any()))
                 .thenReturn(Collections.singletonList(dbRecord));
 
@@ -127,7 +128,7 @@ class FetchUserDetailsTest {
         dbRecord.put(Constants.FIRST_NAME, "Alice");
         dbRecord.put(Constants.PROFILE_DETAILS, null);
 
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(
+        when(cassandraOperation.getRecordsByProperties(
                 anyString(), anyString(), anyMap(), anyList(), any()))
                 .thenReturn(Collections.singletonList(dbRecord));
 
@@ -146,7 +147,7 @@ class FetchUserDetailsTest {
         dbRecord.put(Constants.FIRST_NAME, "Bob");
         dbRecord.put(Constants.PROFILE_DETAILS, "invalid_json");
 
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(
+        when(cassandraOperation.getRecordsByProperties(
                 anyString(), anyString(), anyMap(), anyList(), any()))
                 .thenReturn(Collections.singletonList(dbRecord));
 
@@ -164,7 +165,7 @@ class FetchUserDetailsTest {
         dbRecord.put(Constants.FIRST_NAME, "Alice");
         dbRecord.put(Constants.PROFILE_DETAILS, "{}");
 
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(
+        when(cassandraOperation.getRecordsByProperties(
                 anyString(), anyString(), anyMap(), anyList(), any()))
                 .thenReturn(Collections.singletonList(dbRecord));
 

@@ -155,4 +155,5 @@ public class Constants {
   public static final String FETCH_TAGGED_USER_DETAILS_LOG = "CommentServiceImpl::getComments::fetching taggedUserDetails from primary";
   public static final String SERIALIZE_RESULT_MAP_TO_JSON_FOR_REDIS_STORAGE_LOG = "Error serializing resultMap to JSON for Redis storage";
   public static final String COMMENT_TREE_NOT_FOUND = "CommentTree Not found";
+  public static final String ERROR_MISSING_PARAM = "Failed Due To Missing Params - ";
 }

@@ -3,10 +3,8 @@ package com.tarento.commenthub.authentication.util;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tarento.commenthub.cache.CacheService;
 import com.tarento.commenthub.constant.Constants;
 import com.tarento.commenthub.exception.CommentException;
-import com.tarento.commenthub.transactional.cassandrautils.CassandraOperation;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -16,8 +14,8 @@ import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.igot.common.cassandra.CassandraOperation;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 import redis.clients.jedis.JedisPool;
 
@@ -54,14 +52,13 @@ public class FetchUserDetails {
 
   public List<Object> fetchUserFromprimary(List<String> userIds) {
     log.info("FetchUserDetails::fetchUserFromprimary::fetching userDetails from primaryDb");
-    List<Object> userList = new ArrayList<>();
     Map<String, Object> propertyMap = new HashMap<>();
     propertyMap.put(Constants.ID, userIds);
-    List<Map<String, Object>> userInfoList = cassandraOperation.getRecordsByPropertiesWithoutFiltering(
+    List<Map<String, Object>> userInfoList = cassandraOperation.getRecordsByProperties(
         Constants.KEYSPACE_SUNBIRD, Constants.TABLE_USER, propertyMap,
         Arrays.asList(Constants.PROFILE_DETAILS, Constants.FIRST_NAME, Constants.ID), null);
 
-    userList = userInfoList.stream()
+    List<Object> userList = userInfoList.stream()
         .map(userInfo -> {
           Map<String, Object> userMap = new HashMap<>();
 

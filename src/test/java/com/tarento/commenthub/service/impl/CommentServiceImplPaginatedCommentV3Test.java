@@ -11,7 +11,6 @@ import com.tarento.commenthub.dto.SearchCriteria;
 import com.tarento.commenthub.entity.Comment;
 import com.tarento.commenthub.repository.CommentRepository;
 import com.tarento.commenthub.repository.CommentTreeRepository;
-import com.tarento.commenthub.transactional.utils.ApiResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -29,6 +28,8 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+
+import org.igot.common.ApiResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.test.util.ReflectionTestUtils;
 

@@ -6,7 +6,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.tarento.commenthub.constant.Constants;
 import com.tarento.commenthub.entity.Comment;
-import com.tarento.commenthub.transactional.cassandrautils.CassandraOperation;
+
+import org.igot.common.cassandra.CassandraOperation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -47,7 +48,7 @@ class CommentServiceImplFetchUsersByCommentDataTest {
         List<Comment> comments = createMockComments();
         List<Map<String, Object>> mockUserInfoList = createMockUserInfoList();
         
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(
+        when(cassandraOperation.getRecordsByProperties(
                 eq(Constants.KEYSPACE_SUNBIRD), 
                 eq(Constants.TABLE_USER), 
                 any(Map.class), 
@@ -71,7 +72,7 @@ class CommentServiceImplFetchUsersByCommentDataTest {
         assertEquals("John", firstUser.get(Constants.USER_NAME));
         assertEquals("profile1.jpg", firstUser.get(Constants.PROFILE_IMG));
         
-        verify(cassandraOperation).getRecordsByPropertiesWithoutFiltering(
+        verify(cassandraOperation).getRecordsByProperties(
                 eq(Constants.KEYSPACE_SUNBIRD), 
                 eq(Constants.TABLE_USER), 
                 any(Map.class), 
@@ -85,7 +86,7 @@ class CommentServiceImplFetchUsersByCommentDataTest {
         List<Comment> comments = createMockComments();
         List<Map<String, Object>> mockUserInfoList = createMockUserInfoListWithoutProfileImg();
         
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(
+        when(cassandraOperation.getRecordsByProperties(
                 eq(Constants.KEYSPACE_SUNBIRD), 
                 eq(Constants.TABLE_USER), 
                 any(Map.class), 
@@ -116,7 +117,7 @@ class CommentServiceImplFetchUsersByCommentDataTest {
         List<Comment> comments = createMockComments();
         List<Map<String, Object>> mockUserInfoList = createMockUserInfoListWithBlankProfile();
         
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(
+        when(cassandraOperation.getRecordsByProperties(
                 eq(Constants.KEYSPACE_SUNBIRD), 
                 eq(Constants.TABLE_USER), 
                 any(Map.class), 
@@ -146,7 +147,7 @@ class CommentServiceImplFetchUsersByCommentDataTest {
         List<Comment> comments = createMockComments();
         List<Map<String, Object>> mockUserInfoList = createMockUserInfoList();
         
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(
+        when(cassandraOperation.getRecordsByProperties(
                 eq(Constants.KEYSPACE_SUNBIRD), 
                 eq(Constants.TABLE_USER), 
                 any(Map.class), 
@@ -171,7 +172,7 @@ class CommentServiceImplFetchUsersByCommentDataTest {
         // Arrange
         List<Comment> comments = new ArrayList<>();
         
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(
+        when(cassandraOperation.getRecordsByProperties(
                 eq(Constants.KEYSPACE_SUNBIRD), 
                 eq(Constants.TABLE_USER), 
                 any(Map.class), 
@@ -194,7 +195,7 @@ class CommentServiceImplFetchUsersByCommentDataTest {
         List<Comment> comments = createMockComments();
         List<Map<String, Object>> mockUserInfoList = createMockUserInfoList();
         
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(
+        when(cassandraOperation.getRecordsByProperties(
                 eq(Constants.KEYSPACE_SUNBIRD), 
                 eq(Constants.TABLE_USER), 
                 any(Map.class), 

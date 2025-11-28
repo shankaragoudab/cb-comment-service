@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.tarento.commenthub.authentication.util.AccessTokenValidator;
 import com.tarento.commenthub.authentication.util.FetchUserDetails;
 import com.tarento.commenthub.constant.Constants;
 import com.tarento.commenthub.dto.*;
@@ -18,10 +17,12 @@ import com.tarento.commenthub.repository.CommentTreeRepository;
 import com.tarento.commenthub.repository.UserCommentLikeRepository;
 import com.tarento.commenthub.service.CommentTreeService;
 import com.tarento.commenthub.service.ContentService;
-import com.tarento.commenthub.transactional.cassandrautils.CassandraOperation;
-import com.tarento.commenthub.transactional.utils.ApiResponse;
 import com.tarento.commenthub.utility.Status;
 import com.tarento.commenthub.utility.notificationutill.HelperMethodService;
+
+import org.igot.common.ApiResponse;
+import org.igot.common.auth.AccessTokenValidator;
+import org.igot.common.cassandra.CassandraOperation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -594,7 +595,7 @@ class CommentServiceImplTest {
         recordMap.put("flag", 1);
         List<Map<String, Object>> records = List.of(recordMap);
 
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(eq(Constants.KEYSPACE_SUNBIRD), eq("comment_likes"), anyMap(), eq(Collections.singletonList("flag")), isNull())).thenReturn(records);
+        when(cassandraOperation.getRecordsByProperties(eq(Constants.KEYSPACE_SUNBIRD), eq("comment_likes"), anyMap(), eq(Collections.singletonList("flag")), isNull())).thenReturn(records);
 
         ApiResponse response = commentService.getCommentLike(commentId, userId);
 
@@ -606,7 +607,7 @@ class CommentServiceImplTest {
     @Test
     void testGetCommentLike_userDidNotLikeComment() {
 
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(anyString(), anyString(), anyMap(), anyList(), isNull())).thenReturn(Collections.emptyList());
+        when(cassandraOperation.getRecordsByProperties(anyString(), anyString(), anyMap(), anyList(), isNull())).thenReturn(Collections.emptyList());
 
         ApiResponse response = commentService.getCommentLike(commentId, userId);
 
