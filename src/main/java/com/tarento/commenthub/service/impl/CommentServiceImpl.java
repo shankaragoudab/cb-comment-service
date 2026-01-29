@@ -5,7 +5,6 @@ import static com.tarento.commenthub.utility.CommentsUtility.containsNull;
 
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
-import com.auth0.jwt.interfaces.DecodedJWT;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -16,7 +15,7 @@ import com.fasterxml.uuid.Generators;
 import com.networknt.schema.JsonSchema;
 import com.networknt.schema.JsonSchemaFactory;
 import com.networknt.schema.ValidationMessage;
-import com.tarento.commenthub.authentication.util.AccessTokenValidator;
+import com.networknt.schema.SpecVersion.VersionFlag;
 import com.tarento.commenthub.authentication.util.FetchUserDetails;
 import com.tarento.commenthub.constant.Constants;
 import com.tarento.commenthub.dto.CommentTreeIdentifierDTO;
@@ -34,22 +33,21 @@ import com.tarento.commenthub.repository.UserCommentLikeRepository;
 import com.tarento.commenthub.service.CommentService;
 import com.tarento.commenthub.service.CommentTreeService;
 import com.tarento.commenthub.service.ContentService;
-import com.tarento.commenthub.transactional.cassandrautils.CassandraOperation;
-import com.tarento.commenthub.transactional.utils.ApiResponse;
 import com.tarento.commenthub.utility.Status;
 import java.io.InputStream;
 import java.sql.Timestamp;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import com.tarento.commenthub.utility.notificationutill.HelperMethodService;
-import com.tarento.commenthub.utility.notificationutill.NotificationTriggerService;
+
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.igot.common.ApiResponse;
+import org.igot.common.auth.AccessTokenValidator;
+import org.igot.common.cassandra.CassandraOperation;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
@@ -63,23 +61,20 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class CommentServiceImpl implements CommentService {
 
-  @Autowired
   private CommentRepository commentRepository;
-
-  @Autowired
   private CommentTreeService commentTreeService;
-
-  @Autowired
   private ObjectMapper objectMapper;
-
-  @Autowired
-  private RedisTemplate redisTemplate;
+  private RedisTemplate<String, Object> redisTemplate;
+  private CassandraOperation cassandraOperation;
+  private CommentTreeRepository commentTreeRepository;
+  private AccessTokenValidator accessTokenValidator;
+  private FetchUserDetails fetchUser;
+  private UserCommentLikeRepository userCommentLikeRepository;
+  private ContentService contentService;
+  private HelperMethodService helperMethodService;
 
   @Value("${redis.ttl}")
   private long redisTtl;
-
-  @Autowired
-  private CassandraOperation cassandraOperation;
 
   @Value("${jwt.secret.key}")
   private String jwtSecretKey;
@@ -90,26 +85,29 @@ public class CommentServiceImpl implements CommentService {
   @Value("${default.offset}")
   private int defaultOffset;
 
-  @Autowired
-  private CommentTreeRepository commentTreeRepository;
-
-  @Autowired
-  private AccessTokenValidator accessTokenValidator;
-
-  @Autowired
-  private FetchUserDetails fetchUser;
-
-  @Autowired
-  private UserCommentLikeRepository userCommentLikeRepository;
-
-  @Autowired
-  private ContentService contentService;
-
-  @Autowired
-  private NotificationTriggerService notificationTriggerService;
-
-  @Autowired
-  private HelperMethodService helperMethodService;
+  public CommentServiceImpl(CommentRepository commentRepository,
+                            CommentTreeService commentTreeService,
+                            ObjectMapper objectMapper,
+                            RedisTemplate<String, Object> redisTemplate,
+                            CassandraOperation cassandraOperation,
+                            CommentTreeRepository commentTreeRepository,
+                            AccessTokenValidator accessTokenValidator,
+                            FetchUserDetails fetchUser,
+                            UserCommentLikeRepository userCommentLikeRepository,
+                            ContentService contentService,
+                            HelperMethodService helperMethodService) {
+    this.commentRepository = commentRepository;
+    this.commentTreeService = commentTreeService;
+    this.objectMapper = objectMapper;
+    this.redisTemplate = redisTemplate;
+    this.cassandraOperation = cassandraOperation;
+    this.commentTreeRepository = commentTreeRepository;
+    this.accessTokenValidator = accessTokenValidator;
+    this.fetchUser = fetchUser;
+    this.userCommentLikeRepository = userCommentLikeRepository;
+    this.contentService = contentService;
+    this.helperMethodService = helperMethodService;
+  } 
 
   @Override
   public ResponseDTO addFirstCommentToCreateTree(JsonNode payload) {
@@ -133,8 +131,7 @@ public class CommentServiceImpl implements CommentService {
     Comment comment = getPersistedComment(payload);
     ((ObjectNode) payload).put(Constants.COMMENT_ID, comment.getCommentId());
     CommentTree commentTree = commentTreeService.updateCommentTree(payload);
-    ResponseDTO responseDTO = new ResponseDTO(commentTree, comment);
-    return responseDTO;
+    return new ResponseDTO(commentTree, comment);
   }
 
   @Override
@@ -181,17 +178,7 @@ public class CommentServiceImpl implements CommentService {
       // Save the updated comment to the repository
       Comment updatedComment = commentRepository.save(commentToBeUpdated);
 
-      try {
-        // Convert updatedComment to JSON string
-        String commentJson = objectMapper.writeValueAsString(updatedComment);
-
-        // Store the stringified comment in Redis
-        redisTemplate.opsForValue()
-                .set(COMMENT_KEY + commentToBeUpdated.getCommentId(), commentJson, redisTtl, TimeUnit.SECONDS);
-      } catch (Exception e) {
-        // Handle JSON conversion errors
-        log.error("Error occurred while updating comment details in redis", e);
-      }
+      updateCommentInRedis(updatedComment);
       // Fetch the updated CommentTree
       CommentTree commentTree = commentTreeService.getCommentTreeById(paylaod.get(Constants.COMMENT_TREE_ID).asText());
 
@@ -201,7 +188,7 @@ public class CommentServiceImpl implements CommentService {
       return responseDTO;
     } catch (Exception e) {
       log.error("Error occurred while updating comment or fetching CommentTree for commentId: {}", commentToBeUpdated.getCommentId(), e);
-      throw new RuntimeException("Failed to update comment or fetch CommentTree", e);
+      throw new CommentException(Constants.ERROR,"Failed to update comment or fetch CommentTree", e);
     }
   }
 
@@ -255,7 +242,7 @@ public class CommentServiceImpl implements CommentService {
       if (commentedUserListWithoutPrefix != null && !commentedUserListWithoutPrefix.isEmpty()) {
         userList = fetchUser.fetchDataForKeys(commentedUserListWithoutPrefix);
         if (userList == null || userList.isEmpty()) {
-          log.info("CommentServiceImpl::getComments::fetching userDetails from primary");
+          log.info(Constants.FETCH_USER_DETAILS_LOG);
           // Handle the case where userList is empty or null
           userList = fetchUser.fetchUserFromprimary(commentedUserListWithoutPrefix);
         }
@@ -267,7 +254,7 @@ public class CommentServiceImpl implements CommentService {
       if (taggedUserList != null && !taggedUserList.isEmpty()) {
         taggedUsers = fetchUser.fetchDataForKeys(taggedUserList);
         if (taggedUsers == null || taggedUsers.isEmpty()) {
-          log.info("CommentServiceImpl::getComments::fetching taggedUserDetails from primary");
+          log.info(Constants.FETCH_TAGGED_USER_DETAILS_LOG);
           // Handle the case where taggedUsers is empty or null
           taggedUsers = fetchUser.fetchUserFromprimary(taggedUserListWithoutPrefix);
         }
@@ -318,7 +305,7 @@ public class CommentServiceImpl implements CommentService {
       commentTreeService.updateCommentTreeForDeletedComment(commentId, commentTreeIdentifierDTO, parentId);
     } catch (Exception e) {
       log.error("Error occurred while deleting comment from Redis or updating CommentTree for commentId: {}", commentId, e);
-      throw new RuntimeException("Failed to delete comment or update CommentTree", e);
+      throw new CommentException(Constants.ERROR,"Failed to delete comment or update CommentTree", e);
     }
     return comment;
   }
@@ -369,13 +356,13 @@ public class CommentServiceImpl implements CommentService {
       return comment;
     } catch (Exception e) {
       log.error("Error occurred while storing comment in Redis for commentId: {}", comment.getCommentId(), e);
-      throw new RuntimeException("Failed to store comment in Redis", e);
+      throw new CommentException(Constants.ERROR,"Failed to store comment in Redis", e);
     }
   }
 
   public void validatePayload(String fileName, JsonNode payload) {
     try {
-      JsonSchemaFactory schemaFactory = JsonSchemaFactory.getInstance();
+      JsonSchemaFactory schemaFactory = JsonSchemaFactory.getInstance(VersionFlag.V7);
       InputStream schemaStream = schemaFactory.getClass().getResourceAsStream(fileName);
       JsonSchema schema = schemaFactory.getSchema(schemaStream);
 
@@ -391,12 +378,6 @@ public class CommentServiceImpl implements CommentService {
       throw new CommentException(Constants.ERROR, "Failed to validate payload: " + e.getMessage());
     }
   }
-
-  private List<String> getKeys(List<String> childNodeList) {
-    return childNodeList.stream().map(id -> COMMENT_KEY + id)
-        .collect(Collectors.toList());
-  }
-
 
   //need for refactoring later
   @Override
@@ -479,8 +460,8 @@ public class CommentServiceImpl implements CommentService {
       commentRepository.save(commentToBeUpdated);
       return response;
     } catch (Exception e) {
-      log.error("error occured while liking a comment::" + String.valueOf(e));
-      throw new RuntimeException(e);
+      log.error("error occured while liking a comment::" + e.getMessage(), e);
+      throw new CommentException(e);
     }
   }
 
@@ -499,7 +480,7 @@ public class CommentServiceImpl implements CommentService {
     Map<String, Object> propertyMap = new HashMap<>();
     propertyMap.put(Constants.COMMENT_ID, commentId);
     propertyMap.put(Constants.USERID, userId);
-    List<Map<String, Object>> records = cassandraOperation.getRecordsByPropertiesWithoutFiltering(
+    List<Map<String, Object>> records = cassandraOperation.getRecordsByProperties(
         Constants.KEYSPACE_SUNBIRD, "comment_likes", propertyMap,
         Collections.singletonList("flag"), null);
     if (!records.isEmpty()) {
@@ -511,255 +492,230 @@ public class CommentServiceImpl implements CommentService {
     }
   }
 
-  @Override
-  public ApiResponse paginatedComment(SearchCriteria searchCriteria, String version) {
-    String error = validateSearchPayload(searchCriteria);
-    ApiResponse response = new ApiResponse();
-    response.setResponseCode(HttpStatus.OK);
-    if (StringUtils.isNotBlank(error)) {
-      return returnErrorMsg(error, HttpStatus.BAD_REQUEST, response);
-    }
-    String commentTreeId = "";
-    if (searchCriteria.getCommentTreeId().isEmpty()) {
-      CommentTreeIdentifierDTO commentTreeIdentifierDTO = new CommentTreeIdentifierDTO(
-          searchCriteria.getEntityType(), searchCriteria.getEntityId(),
-          searchCriteria.getWorkflow());
-      commentTreeId = generateJwtTokenKey(commentTreeIdentifierDTO);
-    } else {
-      commentTreeId = searchCriteria.getCommentTreeId();
-    }
-    Optional<CommentTree> commentTree = commentTreeRepository.findById(commentTreeId);
-    if (!commentTree.isPresent()) {
-      response.getParams().setErr("CommentTree Not found");
-      return returnErrorMsg("CommentTree Not found", HttpStatus.NOT_FOUND, response);
-    }
-    JsonNode childNodes = commentTree.get().getCommentTreeData().get(Constants.FIRST_LEVEL_NODES);
-    List<String> childNodeList = objectMapper.convertValue(childNodes, List.class);
-    int limit = (searchCriteria.getLimit() != null) ? searchCriteria.getLimit() : defaultLimit;
-    int offset =
-        (searchCriteria.getOffset() != null) ? searchCriteria.getOffset() : defaultOffset;
-    Map<String, Object> resultMap = new HashMap<>();
-    if (!searchCriteria.isOverrideCache()) {
-      try {
-        // Retrieve JSON string from Redis
-        String resultMapJson = (String) redisTemplate.opsForValue().get(generateRedisJwtTokenKey(commentTreeId, offset, limit));
-
-        if (resultMapJson != null) {
-          // Deserialize JSON string to Map
-          resultMap = objectMapper.readValue(resultMapJson, new TypeReference<Map<String, Object>>() {});
+    @Override
+    public ApiResponse paginatedComment(SearchCriteria searchCriteria, String version) {
+        String error = validateSearchPayload(searchCriteria);
+        ApiResponse response = new ApiResponse();
+        response.setResponseCode(HttpStatus.OK);
+        if (StringUtils.isNotBlank(error)) {
+            return returnErrorMsg(error, HttpStatus.BAD_REQUEST, response);
         }
-        // Deserialize JSON string to Map
+
+        String commentTreeId = getCommentTreeId(searchCriteria);
+        Optional<CommentTree> commentTree = commentTreeRepository.findById(commentTreeId);
+        if (!commentTree.isPresent()) {
+            return returnErrorMsg(Constants.COMMENT_TREE_NOT_FOUND, HttpStatus.NOT_FOUND, response);
+        }
+
+        List<String> childNodeList = getChildNodeList(commentTree.get());
+        int limit = getLimit(searchCriteria);
+        int offset = getOffset(searchCriteria);
+
+        Map<String, Object> resultMap = tryFetchFromRedis(commentTreeId, offset, limit);
+        if (searchCriteria.isOverrideCache() || MapUtils.isEmpty(resultMap)) {
+            resultMap = fetchCommentFromPrimary(offset, limit, childNodeList, commentTree.get(), version);
+            storeInRedis(commentTreeId, offset, limit, resultMap);
+        }
+
+        response.setResult(resultMap);
+        return response;
+    }
+
+    private String getCommentTreeId(SearchCriteria searchCriteria) {
+        if (searchCriteria.getCommentTreeId().isEmpty()) {
+            CommentTreeIdentifierDTO dto = new CommentTreeIdentifierDTO(
+                    searchCriteria.getEntityType(), searchCriteria.getEntityId(), searchCriteria.getWorkflow());
+            return generateJwtTokenKey(dto);
+        }
+        return searchCriteria.getCommentTreeId();
+    }
+
+    private List<String> getChildNodeList(CommentTree commentTree) {
+        JsonNode childNodes = commentTree.getCommentTreeData().get(Constants.FIRST_LEVEL_NODES);
+        return objectMapper.convertValue(childNodes, List.class);
+    }
+
+    private int getLimit(SearchCriteria searchCriteria) {
+        return (searchCriteria.getLimit() != null) ? searchCriteria.getLimit() : defaultLimit;
+    }
+
+    private int getOffset(SearchCriteria searchCriteria) {
+        return (searchCriteria.getOffset() != null) ? searchCriteria.getOffset() : defaultOffset;
+    }
+
+    private Map<String, Object> tryFetchFromRedis(String commentTreeId, int offset, int limit) {
+        try {
+            String resultMapJson = (String) redisTemplate.opsForValue().get(generateRedisJwtTokenKey(commentTreeId, offset, limit));
+            if (resultMapJson != null) {
+                return objectMapper.readValue(resultMapJson, new TypeReference<Map<String, Object>>() {});
+            }
         } catch (JsonProcessingException e) {
-        log.error("Error deserializing JSON from Redis", e);
-        throw new RuntimeException("Failed to deserialize JSON", e);
-      }
-    } else {
-      resultMap = fetchCommentFromPrimary(offset, limit, childNodeList, commentTree.get(), searchCriteria.isEnrichedUser(), version);
-      try {
-        // Serialize resultMap to JSON
-        String resultMapJson = objectMapper.writeValueAsString(resultMap);
-
-        // Store the serialized JSON in Redis
-        redisTemplate.opsForValue()
-            .set(generateRedisJwtTokenKey(commentTreeId, offset, limit), resultMapJson, redisTtl, TimeUnit.SECONDS);
-      } catch (JsonProcessingException e) {
-        log.error("Error serializing resultMap to JSON for Redis storage", e);
-        throw new RuntimeException("Failed to serialize resultMap", e);
-      }
-      response.setResult(resultMap);
-      return response;
-    }
-    if (MapUtils.isEmpty(resultMap)) {
-      log.info("CommentServiceImpl::getComments::fetch Comments from postgres");
-      resultMap = fetchCommentFromPrimary(offset, limit, childNodeList, commentTree.get(), searchCriteria.isEnrichedUser(), version);
-      try {
-        // Serialize resultMap to JSON
-        String resultMapJson = objectMapper.writeValueAsString(resultMap);
-
-        // Store the serialized JSON in Redis
-        redisTemplate.opsForValue()
-            .set(generateRedisJwtTokenKey(commentTreeId, offset, limit), resultMapJson, redisTtl, TimeUnit.SECONDS);
-      } catch (JsonProcessingException e) {
-        log.error("Error serializing resultMap to JSON for Redis storage", e);
-        throw new RuntimeException("Failed to serialize resultMap", e);
-      }
-      response.setResult(resultMap);
-      return response;
-    } else {
-      log.info("CommentServiceImpl::getComments::fetch comments from redis");
-      response.setResult(resultMap);
-      return response;
-    }
-  }
-
-  private Map<String, Object> fetchCommentFromPrimary(int offset, int limit,
-      List<String> childNodeList, CommentTree commentTree, boolean isUserEnriched, String version) {
-    Map<String, Object> resultMap = new HashMap<>();
-    Pageable pageable = PageRequest.of(offset, limit,
-        Sort.by(Sort.Direction.DESC, Constants.CREATED_DATE));
-    List<Comment> comments = commentRepository.findByCommentIdIn(childNodeList, pageable)
-        .getContent();
-    List<Object> userList = new ArrayList<>();
-    Set<String> uniqueTaggedUserIds = new HashSet<>();
-    Set<String> uniqueTaggedUserIdWithoutPrefixs = new HashSet<>();
-    Set<String> owneruserIds = new HashSet<>();
-    Set<String> owneruserIdWithoutPrefixs = new HashSet<>();
-// Iterate through each comment to extract tagged users
-    comments.forEach(comment -> {
-      JsonNode commentData = comment.getCommentData();
-      if (commentData != null
-          && commentData.has(Constants.COMMENT_SOURCE)
-          && commentData.get(Constants.COMMENT_SOURCE).has(Constants.USER_ID)) {
-        String userId = commentData.get(Constants.COMMENT_SOURCE).get(Constants.USER_ID).asText();
-        if (userId != null && !userId.isEmpty()) {
-          owneruserIds.add(Constants.USER_PREFIX + userId);
-          owneruserIdWithoutPrefixs.add(userId);
+            log.error("Error deserializing JSON from Redis", e);
+            throw new CommentException(Constants.ERROR, "Failed to deserialize JSON", e);
         }
-      }
-      JsonNode taggedUsersNode = comment.getCommentData().get(Constants.TAGGED_USERS);
-      // Check if taggedUsersNode exists and is an array
-      if (taggedUsersNode != null && taggedUsersNode.isArray()) {
-        // Add each tagged user ID to the set to maintain uniqueness
-        taggedUsersNode.forEach(taggedUser -> {
-          uniqueTaggedUserIds.add(Constants.USER_PREFIX + taggedUser.asText());
-          // Add the tagged user ID without the prefix to uniqueTaggedUserIdWithoutPrefixs
-          uniqueTaggedUserIdWithoutPrefixs.add(taggedUser.asText());
-        });
-      }
-    });
-    List<String> commentedUserListWithoutPrefix = new ArrayList<>(owneruserIds);
-    if (commentedUserListWithoutPrefix != null && !commentedUserListWithoutPrefix.isEmpty()) {
-      userList = fetchUser.fetchDataForKeys(commentedUserListWithoutPrefix);
-      if (userList == null || userList.isEmpty()) {
-        log.info("CommentServiceImpl::getComments::fetching userDetails from primary");
-        // Handle the case where userList is empty or null
-        userList = fetchUser.fetchUserFromprimary(commentedUserListWithoutPrefix);
-      }
-    }
-    List<String> taggedUserList = new ArrayList<>(uniqueTaggedUserIds);
-    List<String> taggedUserListWithoutPrefix = new ArrayList<>(uniqueTaggedUserIdWithoutPrefixs);
-    List<Object> taggedUsers = new ArrayList<>(); // Define and initialize outside the if block
-
-    if (taggedUserList != null && !taggedUserList.isEmpty()) {
-      taggedUsers = fetchUser.fetchDataForKeys(taggedUserList);
-      if (taggedUsers == null || taggedUsers.isEmpty()) {
-        log.info("CommentServiceImpl::getComments::fetching taggedUserDetails from primary");
-        // Handle the case where taggedUsers is empty or null
-        taggedUsers = fetchUser.fetchUserFromprimary(taggedUserListWithoutPrefix);
-      }
-    }
-    // Collect unique IDs
-    Map<String, Object> courseDetails = new HashMap<>();
-    if (commentTree.getCommentTreeData().has(ENTITY_ID)
-        && !commentTree.getCommentTreeData().get(ENTITY_ID).isNull()) {
-      String courseId = commentTree.getCommentTreeData().get(ENTITY_ID).asText();
-      courseDetails = fetchCourseDetails(courseId);
-
-    }
-    //for v2 API
-    if (version.equalsIgnoreCase("v2")){
-      if (commentTree.getCommentTreeData().has(Constants.FIRST_LEVEL_NODES)
-          && !commentTree.getCommentTreeData().get(Constants.FIRST_LEVEL_NODES).isNull()) {
-        // Remove the key from the JSON
-        ((ObjectNode) commentTree.getCommentTreeData()).remove(Constants.FIRST_LEVEL_NODES);
-      }
-      if (commentTree.getCommentTreeData().has(Constants.CHILD_NODES)
-          && !commentTree.getCommentTreeData().get(Constants.CHILD_NODES).isNull()) {
-        // Remove the key from the JSON
-        ((ObjectNode) commentTree.getCommentTreeData()).remove(Constants.CHILD_NODES);
-      }
+        return new HashMap<>();
     }
 
-    CommentsResoponseDTO commentsResoponseDTO = new CommentsResoponseDTO(commentTree,
-        comments, userList, taggedUsers, courseDetails);
-    Optional.ofNullable(comments)
-        .ifPresent(commentsList -> commentsResoponseDTO.setCommentCount(childNodeList.size()));
-    resultMap = objectMapper.convertValue(commentsResoponseDTO, Map.class);
-    return resultMap;
-  }
+    private void storeInRedis(String commentTreeId, int offset, int limit, Map<String, Object> resultMap) {
+        try {
+            String resultMapJson = objectMapper.writeValueAsString(resultMap);
+            redisTemplate.opsForValue().set(generateRedisJwtTokenKey(commentTreeId, offset, limit), resultMapJson, redisTtl, TimeUnit.SECONDS);
+        } catch (JsonProcessingException e) {
+            log.error("Error serializing resultMap to JSON for Redis storage", e);
+            throw new CommentException(Constants.ERROR, "Failed to serialize resultMap", e);
+        }
+    }
+
+    private Map<String, Object> fetchCommentFromPrimary(int offset, int limit,
+                                                        List<String> childNodeList, CommentTree commentTree, String version) {
+        Pageable pageable = PageRequest.of(offset, limit, Sort.by(Sort.Direction.DESC, Constants.CREATED_DATE));
+        List<Comment> comments = commentRepository.findByCommentIdIn(childNodeList, pageable).getContent();
+
+        UserExtractionResult userExtraction = extractUserIdsFromComments(comments);
+
+        List<Object> userList = fetchUsersWithFallback(new ArrayList<>(userExtraction.ownerUserIds));
+        List<Object> taggedUsers = fetchUsersWithFallback(
+                new ArrayList<>(userExtraction.taggedUserIds),
+                new ArrayList<>(userExtraction.taggedUserIdsNoPrefix)
+        );
+
+        Map<String, Object> courseDetails = fetchCourseDetailsIfPresent(commentTree);
+
+        if ("v2".equalsIgnoreCase(version)) {
+            removeKeysForV2(commentTree);
+        }
+
+        CommentsResoponseDTO commentsResoponseDTO = new CommentsResoponseDTO(
+                commentTree, comments, userList, taggedUsers, courseDetails
+        );
+        Optional.ofNullable(comments)
+                .ifPresent(commentsList -> commentsResoponseDTO.setCommentCount(childNodeList.size()));
+        return objectMapper.convertValue(commentsResoponseDTO, Map.class);
+    }
+
+    private static class UserExtractionResult {
+        Set<String> ownerUserIds = new HashSet<>();
+        Set<String> ownerUserIdsNoPrefix = new HashSet<>();
+        Set<String> taggedUserIds = new HashSet<>();
+        Set<String> taggedUserIdsNoPrefix = new HashSet<>();
+    }
+
+    private UserExtractionResult extractUserIdsFromComments(List<Comment> comments) {
+        UserExtractionResult result = new UserExtractionResult();
+        for (Comment comment : comments) {
+            JsonNode commentData = comment.getCommentData();
+            if (commentData != null && commentData.has(Constants.COMMENT_SOURCE)
+                    && commentData.get(Constants.COMMENT_SOURCE).has(Constants.USER_ID)) {
+                String userId = commentData.get(Constants.COMMENT_SOURCE).get(Constants.USER_ID).asText();
+                if (StringUtils.isNotBlank(userId)) {
+                    result.ownerUserIds.add(Constants.USER_PREFIX + userId);
+                    result.ownerUserIdsNoPrefix.add(userId);
+                }
+            }
+            JsonNode taggedUsersNode = commentData.get(Constants.TAGGED_USERS);
+            if (taggedUsersNode != null && taggedUsersNode.isArray()) {
+                taggedUsersNode.forEach(taggedUser -> {
+                    result.taggedUserIds.add(Constants.USER_PREFIX + taggedUser.asText());
+                    result.taggedUserIdsNoPrefix.add(taggedUser.asText());
+                });
+            }
+        }
+        return result;
+    }
+
+    private Map<String, Object> fetchCourseDetailsIfPresent(CommentTree commentTree) {
+        if (commentTree.getCommentTreeData().has(ENTITY_ID)
+                && !commentTree.getCommentTreeData().get(ENTITY_ID).isNull()) {
+            String courseId = commentTree.getCommentTreeData().get(ENTITY_ID).asText();
+            return fetchCourseDetails(courseId);
+        }
+        return new HashMap<>();
+    }
+
+    private void removeKeysForV2(CommentTree commentTree) {
+        ObjectNode data = (ObjectNode) commentTree.getCommentTreeData();
+        if (data.has(Constants.FIRST_LEVEL_NODES)) {
+            data.remove(Constants.FIRST_LEVEL_NODES);
+        }
+        if (data.has(Constants.CHILD_NODES)) {
+            data.remove(Constants.CHILD_NODES);
+        }
+    }
 
   private Map<String, Object> fetchCourseDetails(String courseId) {
     log.info("fetching course details from redis");
-    Map<String, Object> courseDetails = contentService.readContentFromCache(courseId, null);
-    return courseDetails;
+    return contentService.readContentFromCache(courseId, null);
   }
 
-  @Override
-  public ApiResponse listOfComments(List<String> commentIds) {
-    ApiResponse response = new ApiResponse();
-    response.setResponseCode(HttpStatus.OK);
-    if (commentIds.size()==0){
-      return returnErrorMsg("Bad rqst", HttpStatus.BAD_REQUEST, response);
-    }
-    //added sorting
-    int offset = defaultOffset;
-    int limit = defaultLimit;
-    Sort sort = Sort.by(Sort.Direction.DESC, Constants.CREATED_DATE);
-    List<String> statuses = Arrays.asList(Status.ACTIVE.name().toLowerCase(),
-        Status.SUSPENDED.name().toLowerCase());
-    List<Comment> comments = commentRepository.findByCommentIdInAndStatusIn(commentIds, statuses,
-        sort);
-    List<Object> userList = new ArrayList<>();
-    Set<String> uniqueTaggedUserIds = new HashSet<>();
-    Set<String> uniqueTaggedUserIdWithoutPrefixs = new HashSet<>();
-
-    Set<String> owneruserIds = new HashSet<>();
-    Set<String> owneruserIdWithoutPrefixs = new HashSet<>();
-// Iterate through each comment to extract tagged users
-    comments.forEach(comment -> {
-      JsonNode commentData = comment.getCommentData();
-      if (commentData != null
-          && commentData.has(Constants.COMMENT_SOURCE)
-          && commentData.get(Constants.COMMENT_SOURCE).has(Constants.USER_ID)) {
-        String userId = commentData.get(Constants.COMMENT_SOURCE).get(Constants.USER_ID).asText();
-        if (userId != null && !userId.isEmpty()) {
-          owneruserIds.add(Constants.USER_PREFIX + userId);
-          owneruserIdWithoutPrefixs.add(userId);
+    @Override
+    public ApiResponse listOfComments(List<String> commentIds) {
+        ApiResponse response = new ApiResponse();
+        response.setResponseCode(HttpStatus.OK);
+        if (commentIds.isEmpty()) {
+            return returnErrorMsg("Bad rqst", HttpStatus.BAD_REQUEST, response);
         }
-      }
-      JsonNode taggedUsersNode = comment.getCommentData().get(Constants.TAGGED_USERS);
 
-      // Check if taggedUsersNode exists and is an array
-      if (taggedUsersNode != null) {
-        // Add each tagged user ID to the set to maintain uniqueness
-        taggedUsersNode.forEach(taggedUser -> {
-          uniqueTaggedUserIds.add(Constants.USER_PREFIX + taggedUser.asText());
+        Sort sort = Sort.by(Sort.Direction.DESC, Constants.CREATED_DATE);
+        List<String> statuses = Arrays.asList(Status.ACTIVE.name().toLowerCase(), Status.SUSPENDED.name().toLowerCase());
+        List<Comment> comments = commentRepository.findByCommentIdInAndStatusIn(commentIds, statuses, sort);
 
-          // Add the tagged user ID without the prefix to uniqueTaggedUserIdWithoutPrefixs
-          uniqueTaggedUserIdWithoutPrefixs.add(taggedUser.asText());
-        });
-      }
-    });
-    List<String> commentedUserListWithoutPrefix = new ArrayList<>(owneruserIds);
-    if (commentedUserListWithoutPrefix != null && !commentedUserListWithoutPrefix.isEmpty()) {
-      userList = fetchUser.fetchDataForKeys(commentedUserListWithoutPrefix);
-      if (userList == null || userList.isEmpty()) {
-        log.info("CommentServiceImpl::getComments::fetching userDetails from primary");
-        // Handle the case where userList is empty or null
-        userList = fetchUser.fetchUserFromprimary(commentedUserListWithoutPrefix);
-      }
+        Set<String> ownerUserIds = new HashSet<>();
+        Set<String> ownerUserIdsNoPrefix = new HashSet<>();
+        Set<String> taggedUserIds = new HashSet<>();
+        Set<String> taggedUserIdsNoPrefix = new HashSet<>();
+
+        comments.forEach(comment -> extractUserIds(comment, ownerUserIds, ownerUserIdsNoPrefix, taggedUserIds, taggedUserIdsNoPrefix));
+
+        List<Object> userList = fetchUsersWithFallback(new ArrayList<>(ownerUserIds));
+        List<Object> taggedUsers = fetchUsersWithFallback(new ArrayList<>(taggedUserIds), new ArrayList<>(taggedUserIdsNoPrefix));
+
+        CommentsResoponseDTO commentsResoponseDTO = new CommentsResoponseDTO(comments, userList, taggedUsers);
+        Optional.ofNullable(comments).ifPresent(commentsList -> commentsResoponseDTO.setCommentCount(commentsList.size()));
+        Map<String, Object> resultMap = objectMapper.convertValue(commentsResoponseDTO, Map.class);
+
+        response.setResult(resultMap);
+        return response;
     }
-    List<String> taggedUserList = new ArrayList<>(uniqueTaggedUserIds);
-    List<String> taggedUserListWithoutPrefix = new ArrayList<>(uniqueTaggedUserIdWithoutPrefixs);
-    List<Object> taggedUsers = new ArrayList<>(); // Define and initialize outside the if block
 
-    if (taggedUserList != null && !taggedUserList.isEmpty()) {
-      taggedUsers = fetchUser.fetchDataForKeys(taggedUserList);
-      if (taggedUsers == null || taggedUsers.isEmpty()) {
-        log.info("CommentServiceImpl::getComments::fetching taggedUserDetails from primary");
-        // Handle the case where taggedUsers is empty or null
-        taggedUsers = fetchUser.fetchUserFromprimary(taggedUserListWithoutPrefix);
-      }
+    private void extractUserIds(Comment comment, Set<String> ownerUserIds, Set<String> ownerUserIdsNoPrefix,
+                                Set<String> taggedUserIds, Set<String> taggedUserIdsNoPrefix) {
+        JsonNode commentData = comment.getCommentData();
+        if (commentData != null && commentData.has(Constants.COMMENT_SOURCE)
+                && commentData.get(Constants.COMMENT_SOURCE).has(Constants.USER_ID)) {
+            String userId = commentData.get(Constants.COMMENT_SOURCE).get(Constants.USER_ID).asText();
+            if (StringUtils.isNotBlank(userId)) {
+                ownerUserIds.add(Constants.USER_PREFIX + userId);
+                ownerUserIdsNoPrefix.add(userId);
+            }
+        }
+        JsonNode taggedUsersNode = commentData.get(Constants.TAGGED_USERS);
+        if (taggedUsersNode != null && taggedUsersNode.isArray()) {
+            taggedUsersNode.forEach(taggedUser -> {
+                taggedUserIds.add(Constants.USER_PREFIX + taggedUser.asText());
+                taggedUserIdsNoPrefix.add(taggedUser.asText());
+            });
+        }
     }
-    CommentsResoponseDTO commentsResoponseDTO = new CommentsResoponseDTO(comments, userList, taggedUsers);
-    //store it in redis with commentTreeId as key:: TO DO
-    Optional.ofNullable(comments)
-        .ifPresent(commentsList -> commentsResoponseDTO.setCommentCount(commentsList.size()));
-    Map<String, Object> resultMap = objectMapper.convertValue(commentsResoponseDTO, Map.class);
 
-    response.setResult(resultMap);
-    return response;
-  }
+    private List<Object> fetchUsersWithFallback(List<String> userIds) {
+        if (CollectionUtils.isEmpty(userIds)) return new ArrayList<>();
+        List<Object> users = fetchUser.fetchDataForKeys(userIds);
+        if (CollectionUtils.isEmpty(users)) {
+            log.info(Constants.FETCH_USER_DETAILS_LOG);
+            users = fetchUser.fetchUserFromprimary(userIds);
+        }
+        return CollectionUtils.isEmpty(users) ? new ArrayList<>() : users;
+    }
+
+    private List<Object> fetchUsersWithFallback(List<String> userIds, List<String> fallbackIds) {
+        if (CollectionUtils.isEmpty(userIds)) return new ArrayList<>();
+        List<Object> users = fetchUser.fetchDataForKeys(userIds);
+        if (CollectionUtils.isEmpty(users)) {
+            log.info(Constants.FETCH_TAGGED_USER_DETAILS_LOG);
+            users = fetchUser.fetchUserFromprimary(fallbackIds);
+        }
+        return CollectionUtils.isEmpty(users) ? new ArrayList<>() : users;
+    }
 
   @Override
   public ApiResponse reportComment(Map<String, Object> request, String token) {
@@ -864,115 +820,91 @@ public class CommentServiceImpl implements CommentService {
 
   @Override
   public ApiResponse paginatedCommentV3(SearchCriteria searchCriteria) {
-    log.info("CommentServiceImpl:paginatedCommentV3::inside the method:SearchCriteria Payload: {}", searchCriteria);
-    String error = validateSearchPayload(searchCriteria);
-    ApiResponse response = new ApiResponse();
-    response.setResponseCode(HttpStatus.OK);
-    if (StringUtils.isNotBlank(error)) {
-      return returnErrorMsg(error, HttpStatus.BAD_REQUEST, response);
-    }
-    String commentTreeId = "";
-    if (searchCriteria.getCommentTreeId().isEmpty()) {
-      CommentTreeIdentifierDTO commentTreeIdentifierDTO = new CommentTreeIdentifierDTO(
-          searchCriteria.getEntityType(), searchCriteria.getEntityId(),
-          searchCriteria.getWorkflow());
-      commentTreeId = generateJwtTokenKey(commentTreeIdentifierDTO);
-    } else {
-      commentTreeId = searchCriteria.getCommentTreeId();
-    }
-    Map<String, Object> commentResultMap = null;
-    try {
-      // Attempt to fetch from Redis
-      String cachedData = (String) redisTemplate.opsForValue().get(Constants.COMMENT_TREE_REDIS_KEY + commentTreeId);
-      if (cachedData != null) {
-        commentResultMap = objectMapper.readValue(cachedData, new TypeReference<Map<String, Object>>() {});
+      log.info("CommentServiceImpl:paginatedCommentV3::inside the method:SearchCriteria Payload: {}", searchCriteria);
+      String error = validateSearchPayload(searchCriteria);
+      ApiResponse response = new ApiResponse();
+      response.setResponseCode(HttpStatus.OK);
+      if (StringUtils.isNotBlank(error)) {
+          return returnErrorMsg(error, HttpStatus.BAD_REQUEST, response);
       }
-    } catch (Exception e) {
-      log.error("Error occurred while fetching data from Redis for commentTreeId: {}", commentTreeId, e);
-    }
-    if (commentResultMap == null) {
-      log.info("CommentTreeService::getCommentTree:not found in redis");
-      Optional<CommentTree> optionalCommentTree = commentTreeRepository.findById(commentTreeId);
-      if (optionalCommentTree.isPresent()) {
-        log.info("CommentTreeService::getCommentTree:fetching from postgres");
-        commentResultMap = objectMapper.convertValue(optionalCommentTree.get().getCommentTreeData(), Map.class);
-        try {
-          // Serialize and store in Redis
-          String serializedData = objectMapper.writeValueAsString(commentResultMap);
-          redisTemplate.opsForValue().set(Constants.COMMENT_TREE_REDIS_KEY + commentTreeId, serializedData, redisTtl, TimeUnit.SECONDS);
-        } catch (JsonProcessingException e) {
-          log.error("Error occurred while storing data in Redis for commentTreeId: {}", commentTreeId, e);
-        }
+
+      String commentTreeId = getCommentTreeId(searchCriteria);
+      Map<String, Object> commentResultMap = getCommentTreeDataFromCacheOrDb(commentTreeId);
+
+      if (MapUtils.isEmpty(commentResultMap)) {
+          response.getParams().setErr(Constants.COMMENT_TREE_NOT_FOUND);
+          return returnErrorMsg(Constants.COMMENT_TREE_NOT_FOUND, HttpStatus.NOT_FOUND, response);
       }
-    }
-    if (commentResultMap == null) {
-      response.getParams().setErr("CommentTree Not found");
-      return returnErrorMsg("CommentTree Not found", HttpStatus.NOT_FOUND, response);
-    }
-    JsonNode childNodes = objectMapper.valueToTree(
-        commentResultMap.get(Constants.FIRST_LEVEL_NODES));
-    List<String> childNodeList = objectMapper.convertValue(childNodes, List.class);
-    int limit = (searchCriteria.getLimit() != null) ? searchCriteria.getLimit() : defaultLimit;
-    int offset =
-        (searchCriteria.getOffset() != null) ? searchCriteria.getOffset() : defaultOffset;
-    Map<String, Object> resultMap = new HashMap<>();
-    if (!searchCriteria.isOverrideCache()) {
-      try {
-        // Attempt to fetch paginated data from Redis
-        String cachedResult = (String) redisTemplate.opsForValue().get(Constants.COMMENT_KEY + generateRedisJwtTokenKey(commentTreeId, offset, limit));
-        if (cachedResult != null) {
-          resultMap = objectMapper.readValue(cachedResult, new TypeReference<Map<String, Object>>() {});
-        }
-      } catch (Exception e) {
-        log.error("Error occurred while fetching paginated data from Redis for commentTreeId: {}", commentTreeId, e);
+
+      List<String> childNodeList = getChildNodeListFromResultMap(commentResultMap);
+      int limit = getLimit(searchCriteria);
+      int offset = getOffset(searchCriteria);
+
+      Map<String, Object> resultMap = getPaginatedCommentsFromCache(commentTreeId, offset, limit);
+
+      if (searchCriteria.isOverrideCache() || MapUtils.isEmpty(resultMap)) {
+          resultMap = fetchCommentFromPrimaryV3(offset, limit, childNodeList, commentTreeId);
+          storePaginatedCommentsInCache(commentTreeId, offset, limit, resultMap);
       }
-    } else {
-      Optional<CommentTree> optionalCommentTree = commentTreeRepository.findById(commentTreeId);
-      if (optionalCommentTree.isPresent()) {
-        commentResultMap = objectMapper.convertValue(optionalCommentTree.get().getCommentTreeData(), Map.class);
-        try {
-          // Serialize and store in Redis
-          String serializedData = objectMapper.writeValueAsString(commentResultMap);
-          redisTemplate.opsForValue().set(Constants.COMMENT_TREE_REDIS_KEY + commentTreeId, serializedData, redisTtl, TimeUnit.SECONDS);
-        } catch (JsonProcessingException e) {
-          log.error("Error occurred while storing data in Redis for commentTreeId: {}", commentTreeId, e);
-        }
-      }
-      log.info("CommentServiceImpl::getComments::fetch Comments from postgres");
-      resultMap = fetchCommentFromPrimaryV3(offset, limit, childNodeList, commentTreeId);
-      try {
-        // Serialize and store paginated data in Redis
-        String serializedResult = objectMapper.writeValueAsString(resultMap);
-        redisTemplate.opsForValue().set(Constants.COMMENT_KEY + generateRedisJwtTokenKey(commentTreeId, offset, limit), serializedResult, redisTtl, TimeUnit.SECONDS);
-      } catch (JsonProcessingException e) {
-        log.error("Error occurred while storing paginated data in Redis for commentTreeId: {}", commentTreeId, e);
-      }
+
       response.setResult(resultMap);
       return response;
-    }
-    if (MapUtils.isEmpty(resultMap)) {
-      log.info("CommentServiceImpl::getComments::fetch Comments from postgres");
-      resultMap = fetchCommentFromPrimaryV3(offset, limit, childNodeList, commentTreeId);
-      try {
-        // Serialize and store paginated data in Redis
-        String serializedResult = objectMapper.writeValueAsString(resultMap);
-        redisTemplate.opsForValue().set(Constants.COMMENT_KEY + generateRedisJwtTokenKey(commentTreeId, offset, limit), serializedResult, redisTtl, TimeUnit.SECONDS);
-      } catch (JsonProcessingException e) {
-        log.error("Error occurred while storing paginated data in Redis for commentTreeId: {}", commentTreeId, e);
-      }
-      response.setResult(resultMap);
-      return response;
-    } else {
-      log.info("CommentServiceImpl::getComments::fetch comments from redis");
-      response.setResult(resultMap);
-      return response;
-    }
   }
+
+    private Map<String, Object> getCommentTreeDataFromCacheOrDb(String commentTreeId) {
+        try {
+            String cachedData = (String) redisTemplate.opsForValue().get(Constants.COMMENT_TREE_REDIS_KEY + commentTreeId);
+            if (StringUtils.isNotBlank(cachedData)) {
+                return objectMapper.readValue(cachedData, new TypeReference<Map<String, Object>>() {
+                });
+            }
+        } catch (Exception e) {
+            log.error("Error occurred while fetching data from Redis for commentTreeId: {}", commentTreeId, e);
+        }
+        Optional<CommentTree> optionalCommentTree = commentTreeRepository.findById(commentTreeId);
+        if (optionalCommentTree.isPresent()) {
+            Map<String, Object> commentResultMap = objectMapper.convertValue(optionalCommentTree.get().getCommentTreeData(), Map.class);
+            try {
+                String serializedData = objectMapper.writeValueAsString(commentResultMap);
+                redisTemplate.opsForValue().set(Constants.COMMENT_TREE_REDIS_KEY + commentTreeId, serializedData, redisTtl, TimeUnit.SECONDS);
+            } catch (JsonProcessingException e) {
+                log.error("Error occurred while storing data in Redis for commentTreeId: {}", commentTreeId, e);
+            }
+            return commentResultMap;
+        }
+        return new HashMap<>();
+    }
+
+    private List<String> getChildNodeListFromResultMap(Map<String, Object> commentResultMap) {
+        JsonNode childNodes = objectMapper.valueToTree(commentResultMap.get(Constants.FIRST_LEVEL_NODES));
+        return objectMapper.convertValue(childNodes, List.class);
+    }
+
+    private Map<String, Object> getPaginatedCommentsFromCache(String commentTreeId, int offset, int limit) {
+        try {
+            String cachedResult = (String) redisTemplate.opsForValue().get(Constants.COMMENT_KEY + generateRedisJwtTokenKey(commentTreeId, offset, limit));
+            if (StringUtils.isNotBlank(cachedResult)) {
+                return objectMapper.readValue(cachedResult, new TypeReference<Map<String, Object>>() {
+                });
+            }
+        } catch (Exception e) {
+            log.error("Error occurred while fetching paginated data from Redis for commentTreeId: {}", commentTreeId, e);
+        }
+        return new HashMap<>();
+    }
+
+    private void storePaginatedCommentsInCache(String commentTreeId, int offset, int limit, Map<String, Object> resultMap) {
+        try {
+            String serializedResult = objectMapper.writeValueAsString(resultMap);
+            redisTemplate.opsForValue().set(Constants.COMMENT_KEY + generateRedisJwtTokenKey(commentTreeId, offset, limit), serializedResult, redisTtl, TimeUnit.SECONDS);
+        } catch (JsonProcessingException e) {
+            log.error("Error occurred while storing paginated data in Redis for commentTreeId: {}", commentTreeId, e);
+        }
+    }
 
   private Map<String, Object> fetchCommentFromPrimaryV3(int offset, int limit,
       List<String> childNodeList, String commentTreeId) {
     log.info("CommentServiceImpl::getComments::fetch comments from redis");
-    Map<String, Object> resultMap = new HashMap<>();
     Pageable pageable = PageRequest.of(offset, limit,
         Sort.by(Sort.Direction.DESC, Constants.CREATED_DATE));
     List<Comment> comments = commentRepository.findByCommentIdIn(childNodeList, pageable)
@@ -1009,7 +941,7 @@ public class CommentServiceImpl implements CommentService {
     if (commentedUserListWithoutPrefix != null && !commentedUserListWithoutPrefix.isEmpty()) {
       userList = fetchUser.fetchDataForKeys(commentedUserListWithoutPrefix);
       if (userList == null || userList.isEmpty()) {
-        log.info("CommentServiceImpl::getComments::fetching userDetails from primary");
+        log.info(Constants.FETCH_USER_DETAILS_LOG);
         // Handle the case where userList is empty or null
         userList = fetchUser.fetchUserFromprimary(commentedUserListWithoutPrefix);
       }
@@ -1021,7 +953,7 @@ public class CommentServiceImpl implements CommentService {
     if (taggedUserList != null && !taggedUserList.isEmpty()) {
       taggedUsers = fetchUser.fetchDataForKeys(taggedUserList);
       if (taggedUsers == null || taggedUsers.isEmpty()) {
-        log.info("CommentServiceImpl::getComments::fetching taggedUserDetails from primary");
+        log.info(Constants.FETCH_TAGGED_USER_DETAILS_LOG);
         // Handle the case where taggedUsers is empty or null
         taggedUsers = fetchUser.fetchUserFromprimary(taggedUserListWithoutPrefix);
       }
@@ -1030,12 +962,11 @@ public class CommentServiceImpl implements CommentService {
         comments, userList, taggedUsers, commentTreeId);
     Optional.ofNullable(comments)
         .ifPresent(commentsList -> commentsResoponseDTO.setCommentCount(childNodeList.size()));
-    resultMap = objectMapper.convertValue(commentsResoponseDTO, Map.class);
-    return resultMap;
+    return objectMapper.convertValue(commentsResoponseDTO, Map.class);
   }
 
   private String validateReportCommentPayload(Map<String, Object> request) {
-    StringBuffer str = new StringBuffer();
+    StringBuilder str = new StringBuilder();
     List<String> errList = new ArrayList<>();
 
     if (request.containsKey(Constants.COMMENT_ID) &&
@@ -1064,7 +995,7 @@ public class CommentServiceImpl implements CommentService {
       }
     }
     if (!errList.isEmpty()) {
-      str.append("Failed Due To Missing Params - ").append(errList).append(".");
+      str.append(Constants.ERROR_MISSING_PARAM).append(errList).append(".");
     }
     return str.toString();
   }
@@ -1076,21 +1007,23 @@ public class CommentServiceImpl implements CommentService {
   }
 
   private String validateSearchPayload(SearchCriteria searchCriteria) {
-    StringBuffer str = new StringBuffer();
+    StringBuilder str = new StringBuilder();
     List<String> errList = new ArrayList<>();
 
     if (StringUtils.isBlank(searchCriteria.getCommentTreeId())) {
-      if(searchCriteria.getEntityType().isEmpty() && searchCriteria.getEntityType().isEmpty() && searchCriteria.getWorkflow().isEmpty())
-      errList.add(Constants.COMMENT_TREE_ID);
+      if (searchCriteria.getEntityType().isEmpty() && searchCriteria.getEntityType().isEmpty()
+          && searchCriteria.getWorkflow().isEmpty()) {
+        errList.add(Constants.COMMENT_TREE_ID);
+      }
     }
     if (!errList.isEmpty()) {
-      str.append("Failed Due To Missing Params - ").append(errList).append(".");
+      str.append(Constants.ERROR_MISSING_PARAM).append(errList).append(".");
     }
     return str.toString();
   }
 
   private String validatePayloadForCommAndUser(String commentId, String userId) {
-    StringBuffer str = new StringBuffer();
+    StringBuilder str = new StringBuilder();
     List<String> errList = new ArrayList<>();
 
     if (StringUtils.isBlank(commentId)) {
@@ -1100,13 +1033,13 @@ public class CommentServiceImpl implements CommentService {
       errList.add(Constants.USERID);
     }
     if (!errList.isEmpty()) {
-      str.append("Failed Due To Missing Params - ").append(errList).append(".");
+      str.append(Constants.ERROR_MISSING_PARAM).append(errList).append(".");
     }
     return str.toString();
   }
 
   private String validateLikeCommentPayload(Map<String, Object> likePayload) {
-    StringBuffer str = new StringBuffer();
+    StringBuilder str = new StringBuilder();
     List<String> errList = new ArrayList<>();
 
     if (StringUtils.isBlank((String) likePayload.get(Constants.COMMENT_ID))) {
@@ -1126,7 +1059,7 @@ public class CommentServiceImpl implements CommentService {
       errList.add("flag must be either 'like' or 'dislike'");
     }
     if (!errList.isEmpty()) {
-      str.append("Failed Due To Missing Params - ").append(errList).append(".");
+      str.append(Constants.ERROR_MISSING_PARAM).append(errList).append(".");
     }
     return str.toString();
   }
@@ -1152,55 +1085,6 @@ public class CommentServiceImpl implements CommentService {
     return jwtToken;
   }
 
-  private List<Map<String, Object>> fetchUsersByCommentData (List<Comment> comments) {
-    List<Map<String, Object>> userList = new ArrayList<>();
-    List<String> userIds = comments.stream()
-        .map(comment -> comment.getCommentData().get(Constants.COMMENT_SOURCE)
-            .get(Constants.USER_ID).asText())
-        .collect(Collectors.toList());
-    Map<String, Object> propertyMap = new HashMap<>();
-    propertyMap.put(Constants.ID, userIds);
-    List<Map<String, Object>> userInfoList = cassandraOperation.getRecordsByPropertiesWithoutFiltering(
-        Constants.KEYSPACE_SUNBIRD, Constants.TABLE_USER, propertyMap,
-        Arrays.asList(Constants.PROFILE_DETAILS, Constants.FIRST_NAME, Constants.ID), null);
-
-    userList = userInfoList.stream()
-        .map(userInfo -> {
-          Map<String, Object> userMap = new HashMap<>();
-
-          // Extract user ID and user name
-          String userId = (String) userInfo.get(Constants.ID);
-          String userName = (String) userInfo.get(Constants.FIRST_NAME);
-
-          userMap.put(Constants.USER_ID, userId);
-          userMap.put(Constants.USER_NAME, userName);
-
-          // Process profile details if present
-          String profileDetails = (String) userInfo.get(Constants.PROFILE_DETAILS);
-          if (StringUtils.isNotBlank(profileDetails)) {
-            try {
-              // Convert JSON profile details to a Map
-              Map<String, Object> profileDetailsMap = objectMapper.readValue(profileDetails,
-                  new TypeReference<HashMap<String, Object>>() {});
-
-              // Check for profile image and add to userMap if available
-              if (MapUtils.isNotEmpty(profileDetailsMap) && profileDetailsMap.containsKey(Constants.PROFILE_IMG)) {
-                String profileImageUrl = (String) profileDetailsMap.get(Constants.PROFILE_IMG);
-                if (StringUtils.isNotEmpty(profileImageUrl)) {
-                  userMap.put(Constants.PROFILE_IMG, profileImageUrl);
-                }
-              }
-            } catch (JsonProcessingException e) {
-              throw new RuntimeException(e);
-            }
-          }
-
-          return userMap;
-        })
-        .collect(Collectors.toList());
-    return userList;
-  }
-
   public String generateRedisJwtTokenKey(String commentTreeId, Integer offset, Integer limit) {
       try {
         return JWT.create()
@@ -1214,4 +1098,17 @@ public class CommentServiceImpl implements CommentService {
     return "";
   }
 
+    private void updateCommentInRedis(Comment comment) {
+        try {
+            // Convert updatedComment to JSON string
+            String commentJson = objectMapper.writeValueAsString(comment);
+
+            // Store the stringified comment in Redis
+            redisTemplate.opsForValue()
+                    .set(COMMENT_KEY + comment.getCommentId(), commentJson, redisTtl, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            // Handle JSON conversion errors
+            log.error("Error occurred while updating comment details in redis", e);
+        }
+    }
 }

@@ -10,8 +10,9 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.tarento.commenthub.constant.Constants;
 import com.tarento.commenthub.service.ContentService;
-import com.tarento.commenthub.transactional.cassandrautils.CassandraOperation;
 import com.tarento.commenthub.utility.RedisCacheMngr;
+
+import org.igot.common.cassandra.CassandraOperation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -69,7 +70,7 @@ class HelperMethodServiceTest {
         List<Object> result = helperMethodService.fetchUserFromPrimary(emptyUserIds);
 
         assertTrue(result.isEmpty());
-        verify(cassandraOperation, never()).getRecordsByPropertiesWithoutFiltering(any(), any(), any(), any(), any());
+        verify(cassandraOperation, never()).getRecordsByProperties(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -77,13 +78,13 @@ class HelperMethodServiceTest {
         List<Object> result = helperMethodService.fetchUserFromPrimary(null);
 
         assertTrue(result.isEmpty());
-        verify(cassandraOperation, never()).getRecordsByPropertiesWithoutFiltering(any(), any(), any(), any(), any());
+        verify(cassandraOperation, never()).getRecordsByProperties(any(), any(), any(), any(), any());
     }
 
     @Test
     void testFetchUserFromPrimary_EmptyUserInfoList() {
         List<String> userIds = Arrays.asList("user1", "user2");
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(any(), any(), any(), any(), any()))
+        when(cassandraOperation.getRecordsByProperties(any(), any(), any(), any(), any()))
                 .thenReturn(Collections.emptyList());
 
         List<Object> result = helperMethodService.fetchUserFromPrimary(userIds);
@@ -100,7 +101,7 @@ class HelperMethodServiceTest {
         userInfo.put(Constants.PROFILE_DETAILS, "{\"profileImageUrl\":\"image.jpg\",\"designation\":\"Developer\",\"employmentDetails\":{\"departmentName\":\"IT\"}}");
 
         List<Map<String, Object>> userInfoList = Arrays.asList(userInfo);
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(any(), any(), any(), any(), any()))
+        when(cassandraOperation.getRecordsByProperties(any(), any(), any(), any(), any()))
                 .thenReturn(userInfoList);
 
         Map<String, Object> profileDetailsMap = new HashMap<>();
@@ -128,7 +129,7 @@ class HelperMethodServiceTest {
         userInfo.put(Constants.PROFILE_DETAILS, "");
 
         List<Map<String, Object>> userInfoList = Arrays.asList(userInfo);
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(any(), any(), any(), any(), any()))
+        when(cassandraOperation.getRecordsByProperties(any(), any(), any(), any(), any()))
                 .thenReturn(userInfoList);
 
         List<Object> result = helperMethodService.fetchUserFromPrimary(userIds);
@@ -147,7 +148,7 @@ class HelperMethodServiceTest {
         userInfo.put(Constants.PROFILE_DETAILS, "{\"invalid\":\"json\"}");
 
         List<Map<String, Object>> userInfoList = Arrays.asList(userInfo);
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(any(), any(), any(), any(), any()))
+        when(cassandraOperation.getRecordsByProperties(any(), any(), any(), any(), any()))
                 .thenReturn(userInfoList);
 
         when(objectMapper.readValue(anyString(), any(TypeReference.class)))
@@ -168,7 +169,7 @@ class HelperMethodServiceTest {
         userInfo.put(Constants.PROFILE_DETAILS, "{}");
 
         List<Map<String, Object>> userInfoList = Arrays.asList(userInfo);
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(any(), any(), any(), any(), any()))
+        when(cassandraOperation.getRecordsByProperties(any(), any(), any(), any(), any()))
                 .thenReturn(userInfoList);
 
         when(objectMapper.readValue(anyString(), any(TypeReference.class))).thenReturn(new HashMap<>());
@@ -207,7 +208,7 @@ class HelperMethodServiceTest {
         // Mock Cassandra call
         Map<String, Object> userMap = new HashMap<>();
         userMap.put(Constants.FIRST_NAME_KEY, "Jane");
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(any(), any(), any(), any(), any()))
+        when(cassandraOperation.getRecordsByProperties(any(), any(), any(), any(), any()))
                 .thenReturn(Arrays.asList(Collections.singletonMap(Constants.ID, userId)));
 
         String result = helperMethodService.fetchUserFirstName(userId);
@@ -226,7 +227,7 @@ class HelperMethodServiceTest {
         lenient().when(objectMapper.readValue(eq(redisData), any(TypeReference.class))).thenReturn(resultMap);
 
         // Mock Cassandra call - need to return empty list to get "User" as default
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(any(), any(), any(), any(), any()))
+        when(cassandraOperation.getRecordsByProperties(any(), any(), any(), any(), any()))
                 .thenReturn(Collections.emptyList());
 
         String result = helperMethodService.fetchUserFirstName(userId);
@@ -253,7 +254,7 @@ class HelperMethodServiceTest {
 
         Map<String, Object> userMap = new HashMap<>();
         userMap.put(Constants.FIRST_NAME_KEY, "Jane");
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(any(), any(), any(), any(), any()))
+        when(cassandraOperation.getRecordsByProperties(any(), any(), any(), any(), any()))
                 .thenReturn(Arrays.asList(Collections.singletonMap(Constants.ID, userId)));
 
         String result = helperMethodService.fetchUserFirstName(userId);
@@ -272,7 +273,7 @@ class HelperMethodServiceTest {
         cassandraUserInfo.put(Constants.FIRST_NAME, "Jane");
         cassandraUserInfo.put(Constants.PROFILE_DETAILS, "");
         
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(any(), any(), any(), any(), any()))
+        when(cassandraOperation.getRecordsByProperties(any(), any(), any(), any(), any()))
                 .thenReturn(Arrays.asList(cassandraUserInfo));
 
         String result = helperMethodService.fetchUserFirstName(userId);
@@ -284,7 +285,7 @@ class HelperMethodServiceTest {
     void testFetchUserFirstName_EmptyCassandraResults() {
         String userId = "user1";
         when(cacheService.getContentFromCache(Constants.USER_PREFIX + userId)).thenReturn("");
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(any(), any(), any(), any(), any()))
+        when(cassandraOperation.getRecordsByProperties(any(), any(), any(), any(), any()))
                 .thenReturn(Collections.emptyList());
 
         String result = helperMethodService.fetchUserFirstName(userId);
@@ -385,7 +386,7 @@ class HelperMethodServiceTest {
 
         // Mock fetchUserFirstName
         when(cacheService.getContentFromCache(anyString())).thenReturn("");
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(any(), any(), any(), any(), any()))
+        when(cassandraOperation.getRecordsByProperties(any(), any(), any(), any(), any()))
                 .thenReturn(Collections.emptyList());
 
         // Mock decodeJwtAndFetchCourseId
@@ -399,7 +400,7 @@ class HelperMethodServiceTest {
 
             Map<String, Object> courseResponse = new HashMap<>();
             courseResponse.put("name", "Test Course");
-            when(contentService.readContentFromCache(eq("course123"), eq(Arrays.asList(Constants.NAME)))).thenReturn(courseResponse);
+            when(contentService.readContentFromCache("course123", Arrays.asList(Constants.NAME))).thenReturn(courseResponse);
 
             helperMethodService.sendNotificationToUser(commentPayload, commentId, userIdList);
 
@@ -432,12 +433,12 @@ class HelperMethodServiceTest {
 
         // Mock fetchUserFirstName
         when(cacheService.getContentFromCache(anyString())).thenReturn("");
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(any(), any(), any(), any(), any()))
+        when(cassandraOperation.getRecordsByProperties(any(), any(), any(), any(), any()))
                 .thenReturn(Collections.emptyList());
 
         Map<String, Object> courseResponse = new HashMap<>();
         courseResponse.put("name", "Another Course");
-        when(contentService.readContentFromCache(eq("course456"), eq(Arrays.asList(Constants.NAME)))).thenReturn(courseResponse);
+        when(contentService.readContentFromCache("course456", Arrays.asList(Constants.NAME))).thenReturn(courseResponse);
 
         helperMethodService.sendNotificationToUser(commentPayload, commentId, userIdList);
 
@@ -473,12 +474,12 @@ class HelperMethodServiceTest {
 
         // Mock fetchUserFirstName
         when(cacheService.getContentFromCache(anyString())).thenReturn("");
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(any(), any(), any(), any(), any()))
+        when(cassandraOperation.getRecordsByProperties(any(), any(), any(), any(), any()))
                 .thenReturn(Collections.emptyList());
 
         Map<String, Object> courseResponse = new HashMap<>();
         courseResponse.put("name", "Reply Course");
-        when(contentService.readContentFromCache(eq("course456"), eq(Arrays.asList(Constants.NAME)))).thenReturn(courseResponse);
+        when(contentService.readContentFromCache("course456", Arrays.asList(Constants.NAME))).thenReturn(courseResponse);
 
         helperMethodService.sendNotificationToUser(commentPayload, commentId, userIdList);
 
@@ -506,7 +507,7 @@ class HelperMethodServiceTest {
 
         // Mock fetchUserFirstName
         when(cacheService.getContentFromCache(anyString())).thenReturn("");
-        when(cassandraOperation.getRecordsByPropertiesWithoutFiltering(any(), any(), any(), any(), any()))
+        when(cassandraOperation.getRecordsByProperties(any(), any(), any(), any(), any()))
                 .thenReturn(Collections.emptyList());
 
         helperMethodService.sendNotificationToUser(commentPayload, commentId, userIdList);

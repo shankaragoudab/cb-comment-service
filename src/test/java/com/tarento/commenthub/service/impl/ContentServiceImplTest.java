@@ -186,7 +186,7 @@ class ContentServiceImplTest {
         response.put(Constants.RESPONSE_CODE, "ERROR");
         when(restTemplate.getForObject(anyString(), eq(Map.class))).thenReturn(response);
         Map<String, Object> actualContent = contentService.readContent(CONTENT_ID, fields);
-        assertNull(actualContent);
+        assertTrue(actualContent.isEmpty());
     }
 
     @Test
@@ -198,7 +198,7 @@ class ContentServiceImplTest {
         when(restTemplate.getForObject(anyString(), eq(Map.class))).thenThrow(new RestClientException("Connection failed"));
         Map<String, Object> actualContent = contentService.readContent(CONTENT_ID, fields);
 
-        assertNull(actualContent);
+        assertTrue(actualContent.isEmpty());
     }
 
     @Test
@@ -230,7 +230,7 @@ class ContentServiceImplTest {
         when(serverConfig.getContentReadEndPointFields()).thenReturn("/fields");
         when(restTemplate.getForObject(anyString(), eq(Map.class))).thenReturn(null);
         Map<String, Object> actualContent = contentService.readContent(CONTENT_ID, fields);
-        assertNull(actualContent);
+        assertTrue(actualContent.isEmpty());
     }
 
     @Test
@@ -246,16 +246,22 @@ class ContentServiceImplTest {
     }
 
     @Test
-    void fetchResult_HttpClientErrorException_ReturnsErrorResponse() {
+    void fetchResult_HttpClientErrorException_ReturnsErrorResponse() throws Exception {
         String uri = "http://test-uri.com";
         String errorResponse = "{\"error\":\"Not Found\"}";
         HttpClientErrorException exception = new HttpClientErrorException(HttpStatus.NOT_FOUND, "Not Found", errorResponse.getBytes(), StandardCharsets.UTF_8);
         when(restTemplate.getForObject(uri, Map.class)).thenThrow(exception);
+
+        // Mock the mapper to parse the error response
+        Map<String, Object> expectedErrorMap = new HashMap<>();
+        expectedErrorMap.put("error", "Not Found");
+        when(mapper.readValue(anyString(), any(TypeReference.class))).thenReturn(expectedErrorMap);
+
         Object actualResponse = contentService.fetchResult(uri);
         assertNotNull(actualResponse);
         assertTrue(actualResponse instanceof Map);
         Map<String, Object> responseMap = (Map<String, Object>) actualResponse;
-        assertEquals("Not Found", responseMap.get("error")); // ✅ Fix here
+        assertEquals("Not Found", responseMap.get("error"));
     }
 
     @Test
@@ -343,7 +349,7 @@ class ContentServiceImplTest {
         Map<String, Object> actualResponse = contentService.readContent(null);
 
         // Assert
-        assertNull(actualResponse);
+        assertTrue(actualResponse.isEmpty());
     }
 
     @Test
@@ -352,7 +358,7 @@ class ContentServiceImplTest {
         Map<String, Object> actualResponse = contentService.readContent("");
 
         // Assert
-        assertNull(actualResponse);
+        assertTrue(actualResponse.isEmpty());
     }
 
     @Test
@@ -370,7 +376,7 @@ class ContentServiceImplTest {
         Map<String, Object> actualResponse = contentService.readContent(contentId);
 
         // Assert
-        assertNull(actualResponse);
+        assertTrue(actualResponse.isEmpty());
     }
 
     @Test

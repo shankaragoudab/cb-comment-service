@@ -33,5 +33,4 @@ public class RedisConfiguration {
     poolConfig.setBlockWhenExhausted(true);
     return new JedisPool(poolConfig, redisHost, redisPort);
   }
-
 }

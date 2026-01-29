@@ -17,7 +17,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
@@ -26,20 +25,20 @@ import org.springframework.web.client.RestTemplate;
 @Slf4j
 public class ContentServiceImpl implements ContentService {
 
-  @Autowired
   private DataCacheManager dataCacheMgr;
-
-  @Autowired
   private CbServerProperties serverConfig;
-
-  @Autowired
   private RestTemplate restTemplate;
-
-  @Autowired
   private RedisCacheMngr redisCacheMgr;
-
-  @Autowired
   private ObjectMapper mapper;
+
+  public ContentServiceImpl(DataCacheManager dataCacheMgr, CbServerProperties serverConfig,
+      RestTemplate restTemplate, RedisCacheMngr redisCacheMgr, ObjectMapper mapper) {
+    this.dataCacheMgr = dataCacheMgr;
+    this.serverConfig = serverConfig;
+    this.restTemplate = restTemplate;
+    this.redisCacheMgr = redisCacheMgr;
+    this.mapper = mapper;
+  }
 
   @Override
   public Map<String, Object> readContentFromCache(String contentId, List<String> fields) {
@@ -61,7 +60,7 @@ public class ContentServiceImpl implements ContentService {
         responseData = readContent(contentId, fields);
       } else {
         try {
-          responseData = new HashMap<String, Object>();
+          responseData = new HashMap<>();
           Map<String, Object> contentData = mapper.readValue(contentString,
               new TypeReference<Map<String, Object>>() {
               });
@@ -104,12 +103,11 @@ public class ContentServiceImpl implements ContentService {
       log.info("ContentServiceImpl::readContent:read the content");
       return (Map<String, Object>) contentResult.get(Constants.CONTENT);
     }
-    return null;
+    return Collections.emptyMap();
   }
 
   public Object fetchResult(String uri) {
     log.info("ContentServiceImpl::fetchResult:inside");
-    ObjectMapper mapper = new ObjectMapper();
     mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
     Object response = null;
     try {
@@ -123,10 +121,11 @@ public class ContentServiceImpl implements ContentService {
       response = restTemplate.getForObject(uri, Map.class);
     } catch (HttpClientErrorException e) {
       try {
-        response = (new ObjectMapper()).readValue(e.getResponseBodyAsString(),
+        response = mapper.readValue(e.getResponseBodyAsString(),
             new TypeReference<HashMap<String, Object>>() {
             });
       } catch (Exception e1) {
+        log.debug("Error while parsing error response: {}", e1.getMessage(), e1);
       }
       log.error("Error received: " + e.getResponseBodyAsString(), e);
     } catch (Exception e) {
@@ -134,6 +133,7 @@ public class ContentServiceImpl implements ContentService {
       try {
         log.warn("Error Response: " + mapper.writeValueAsString(response));
       } catch (Exception e1) {
+        log.debug("Error while parsing error response: {}", e1.getMessage(), e1);
       }
     }
     return response;

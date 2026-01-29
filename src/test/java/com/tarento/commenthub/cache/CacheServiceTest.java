@@ -6,9 +6,10 @@ import com.tarento.commenthub.constant.Constants;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -22,6 +23,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class CacheServiceTest {
 
     @Mock
@@ -39,14 +41,17 @@ class CacheServiceTest {
     @Mock
     private ValueOperations<String, String> dataValueOperations;
 
-    @InjectMocks
     private CacheService cacheService;
 
     @BeforeEach
     void setUp() {
+        // Ensure opsForValue() returns the correct value operations for all tests
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(redisDataTemplate.opsForValue()).thenReturn(dataValueOperations);
+
+        // Manually create the service with mocked dependencies
+        cacheService = new CacheService(redisTemplate, redisDataTemplate, objectMapper);
         ReflectionTestUtils.setField(cacheService, "cacheTtl", 3600L);
-        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        lenient().when(redisDataTemplate.opsForValue()).thenReturn(dataValueOperations);
     }
 
     @Test
@@ -118,7 +123,7 @@ class CacheServiceTest {
     void testDeleteCache_Success() {
         String key = "testKey";
 
-        when(redisTemplate.delete(Constants.COMMENT_TREE_REDIS_KEY + key)).thenReturn(true);
+        when(redisTemplate.delete(Constants.COMMENT_TREE_REDIS_KEY + key)).thenReturn(Boolean.TRUE);
 
         Long result = cacheService.deleteCache(key);
 
@@ -130,7 +135,7 @@ class CacheServiceTest {
     void testDeleteCache_NotFound() {
         String key = "testKey";
 
-        when(redisTemplate.delete(Constants.COMMENT_TREE_REDIS_KEY + key)).thenReturn(false);
+        when(redisTemplate.delete(Constants.COMMENT_TREE_REDIS_KEY + key)).thenReturn(Boolean.FALSE);
 
         Long result = cacheService.deleteCache(key);
 
@@ -173,11 +178,12 @@ class CacheServiceTest {
     @Test
     void testHget_Exception() {
         List<String> keys = Arrays.asList("key1", "key2");
-        
+
         when(dataValueOperations.get("key1")).thenThrow(new RuntimeException("Redis error"));
 
         List<Object> result = cacheService.hget(keys);
 
+        assertNotNull(result);
         assertTrue(result.isEmpty());
         verify(dataValueOperations).get("key1");
     }

@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.tarento.commenthub.constant.Constants;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -18,18 +17,21 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class CacheService {
 
-  @Autowired
-  private RedisTemplate<String, String> redisTemplate;
-
-  @Autowired
-  @Qualifier(Constants.REDIS_DATA_TEMPLATE)
-  private RedisTemplate<String, String> redisDataTemplate;
-
-  @Autowired
-  private ObjectMapper objectMapper;
+  private final RedisTemplate<String, String> redisTemplate;
+  private final RedisTemplate<String, String> redisDataTemplate;
+  private final ObjectMapper objectMapper;
 
   @Value("${redis.ttl}")
   private long cacheTtl;
+
+  public CacheService(
+      RedisTemplate<String, String> redisTemplate,
+      @Qualifier(Constants.REDIS_DATA_TEMPLATE) RedisTemplate<String, String> redisDataTemplate,
+      ObjectMapper objectMapper) {
+    this.redisTemplate = redisTemplate;
+    this.redisDataTemplate = redisDataTemplate;
+    this.objectMapper = objectMapper;
+  }
 
   public void putCache(String key, Object object) {
     try {
@@ -51,8 +53,8 @@ public class CacheService {
 
   public Long deleteCache(String key) {
     try {
-      boolean result = redisTemplate.delete(Constants.COMMENT_TREE_REDIS_KEY + key);
-      if (result) {
+      Boolean result = redisTemplate.delete(Constants.COMMENT_TREE_REDIS_KEY + key);
+      if (Boolean.TRUE.equals(result)) {
         log.info("Field deleted successfully from key {}.", key);
       } else {
         log.warn("Field not found in key {}.", key);
@@ -79,7 +81,9 @@ public class CacheService {
   public List<Object> hgetMulti(List<String> keys) {
     List<Object> resultList = new ArrayList<>();
     List<String> values = redisTemplate.opsForValue().multiGet(keys);
-    resultList.addAll(values);
+    if (values != null) {
+      resultList.addAll(values);
+    }
     return resultList;
   }
 }

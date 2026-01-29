@@ -136,7 +136,11 @@
 			<groupId>redis.clients</groupId>
 			<artifactId>jedis</artifactId>
 		</dependency>
-
+		<dependency>
+			<groupId>net.karmayogibharat</groupId>
+			<artifactId>common-util</artifactId>
+			<version>1.0.0</version>
+		</dependency>
 
 	</dependencies>
 

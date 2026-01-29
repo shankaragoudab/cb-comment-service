@@ -3,9 +3,8 @@ package com.tarento.commenthub.authentication.util;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tarento.commenthub.cache.CacheService;
 import com.tarento.commenthub.constant.Constants;
-import com.tarento.commenthub.transactional.cassandrautils.CassandraOperation;
+import com.tarento.commenthub.exception.CommentException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -15,8 +14,7 @@ import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.igot.common.cassandra.CassandraOperation;
 import org.springframework.stereotype.Component;
 import redis.clients.jedis.JedisPool;
 
@@ -24,13 +22,14 @@ import redis.clients.jedis.JedisPool;
 @Component
 public class FetchUserDetails {
 
-    @Autowired
-    private JedisPool jedisPool;
+  private final JedisPool jedisPool;
+  private final CassandraOperation cassandraOperation;
+  private final ObjectMapper objectMapper = new ObjectMapper();
 
-  @Autowired
-  private CassandraOperation cassandraOperation;
-
-  ObjectMapper objectMapper = new ObjectMapper();
+  public FetchUserDetails(CassandraOperation cassandraOperation, JedisPool jedisPool) {
+    this.cassandraOperation = cassandraOperation;
+    this.jedisPool = jedisPool;
+  }
 
     public List<Object> fetchDataForKeys(List<String> keys) {
         log.info("FetchUserDetails::fetchDataForKeys::inside method");
@@ -53,14 +52,13 @@ public class FetchUserDetails {
 
   public List<Object> fetchUserFromprimary(List<String> userIds) {
     log.info("FetchUserDetails::fetchUserFromprimary::fetching userDetails from primaryDb");
-    List<Object> userList = new ArrayList<>();
     Map<String, Object> propertyMap = new HashMap<>();
     propertyMap.put(Constants.ID, userIds);
-    List<Map<String, Object>> userInfoList = cassandraOperation.getRecordsByPropertiesWithoutFiltering(
+    List<Map<String, Object>> userInfoList = cassandraOperation.getRecordsByProperties(
         Constants.KEYSPACE_SUNBIRD, Constants.TABLE_USER, propertyMap,
         Arrays.asList(Constants.PROFILE_DETAILS, Constants.FIRST_NAME, Constants.ID), null);
 
-    userList = userInfoList.stream()
+    return userInfoList.stream()
         .map(userInfo -> {
           Map<String, Object> userMap = new HashMap<>();
 
@@ -82,28 +80,25 @@ public class FetchUserDetails {
               // Check for profile image and add to userMap if available
               if (MapUtils.isNotEmpty(profileDetailsMap)) {
                 if (profileDetailsMap.containsKey(Constants.PROFILE_IMG) && StringUtils.isNotBlank((String) profileDetailsMap.get(Constants.PROFILE_IMG))){
-                  userMap.put(Constants.PROFILE_IMG_KEY, (String) profileDetailsMap.get(Constants.PROFILE_IMG));
+                  userMap.put(Constants.PROFILE_IMG_KEY, profileDetailsMap.get(Constants.PROFILE_IMG));
                 }
                 if (profileDetailsMap.containsKey(Constants.DESIGNATION_KEY) && StringUtils.isNotEmpty((String) profileDetailsMap.get(Constants.DESIGNATION_KEY))) {
-
-                  userMap.put(Constants.DESIGNATION_KEY, (String) profileDetailsMap.get(Constants.PROFILE_IMG));
+                  userMap.put(Constants.DESIGNATION_KEY, profileDetailsMap.get(Constants.PROFILE_IMG));
                 }
                 if(profileDetailsMap.containsKey(Constants.EMPLOYMENT_DETAILS) && MapUtils.isNotEmpty(
                     (Map<?, ?>) profileDetailsMap.get(Constants.EMPLOYMENT_DETAILS)) && ((Map<?, ?>) profileDetailsMap.get(Constants.EMPLOYMENT_DETAILS)).containsKey(Constants.DEPARTMENT_KEY) && StringUtils.isNotBlank(
                     (String) ((Map<?, ?>) profileDetailsMap.get(Constants.EMPLOYMENT_DETAILS)).get(Constants.DEPARTMENT_KEY))){
-                  userMap.put(Constants.DEPARTMENT, (String) ((Map<?, ?>) profileDetailsMap.get(Constants.EMPLOYMENT_DETAILS)).get(Constants.DEPARTMENT_KEY));
-
+                  userMap.put(Constants.DEPARTMENT, ((Map<?, ?>) profileDetailsMap.get(Constants.EMPLOYMENT_DETAILS)).get(Constants.DEPARTMENT_KEY));
                 }
 
               }
             } catch (JsonProcessingException e) {
-              throw new RuntimeException(e);
+              throw new CommentException(e);
             }
           }
 
           return userMap;
         })
         .collect(Collectors.toList());
-    return userList;
     }
 }

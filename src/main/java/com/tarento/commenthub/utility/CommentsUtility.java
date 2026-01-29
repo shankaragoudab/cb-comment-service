@@ -4,6 +4,10 @@ import java.util.List;
 
 public class CommentsUtility {
 
+  private CommentsUtility() {
+    // Private constructor to prevent instantiation
+  }
+
   public static boolean containsNull(List<?> list) {
     if (list == null) {
       return true;
